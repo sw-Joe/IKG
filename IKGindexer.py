@@ -1,10 +1,12 @@
-import os
+import asyncio
 from datetime import datetime
+import os
 
 import sqlite3
 import faiss
 import numpy as np
 import trafilatura
+from playwright.async_api import async_playwright
 
 
 
@@ -13,12 +15,9 @@ class IKGIndexer:
         self.db_path = db_path
         self.index_path = index_path
         self.dim = dim
-        
-        # 1. SQLite 초기화
         self.conn = sqlite3.connect(self.db_path)
         self._create_table()
         
-        # 2. FAISS Index 초기화 (Inner Product 사용 - 정규화 시 코사인 유사도와 동일)
         if os.path.exists(self.index_path):
             self.index = faiss.read_index(self.index_path)
         else:
@@ -39,42 +38,65 @@ class IKGIndexer:
         self.conn.commit()
 
 
-    def add_document(self, url, embedder):
-        # 1. Web Scraping
+    async def _get_dynamic_content(self, url):
+        """Playwright를 이용한 동적 콘텐츠 수집 (Fallback)"""
+        async with async_playwright() as p:
+            # 리소스 절약을 위해 브라우저 옵션 최적화
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(user_agent="Mozilla/5.0 ...")
+            page = await context.new_page()
+            
+            # 이미지/폰트/스타일시트 로드 차단 (속도 및 리소스 최적화)
+            await page.route("**/*", lambda route: 
+                route.abort() if route.request.resource_type in ["image", "media", "font"] 
+                else route.continue_())
+
+            try:
+                await page.goto(url, wait_until="networkidle", timeout=30000)
+                # 렌더링된 HTML을 trafilatura로 다시 정밀 추출
+                raw_html = await page.content()
+                content = trafilatura.extract(raw_html)
+                title = await page.title()
+                return content, title
+            except Exception as e:
+                print(f"Dynamic scraping failed for {url}: {e}")
+                return None, None
+            finally:
+                await browser.close()
+
+
+    async def add_document(self, url, embedder):
+        # 1단계: Trafilatura (정적 분석)
         downloaded = trafilatura.fetch_url(url)
         content = trafilatura.extract(downloaded)
-        title = trafilatura.extract_metadata(downloaded).title if downloaded else "Unknown Title"
-        
+        title = trafilatura.extract_metadata(downloaded).title if downloaded else "Unknown"
+
+        # 2단계: 실패 시 Playwright (동적 분석)로 전환
+        # (콘텐츠가 너무 짧거나 특정 에러 문구가 포함된 경우)
+        if not content or len(content) < 300 or "JavaScript is disabled" in content:
+            print(f"Low quality content for {url}. Switching to Playwright...")
+            dynamic_content, dynamic_title = await self._get_dynamic_content(url)
+            if dynamic_content:
+                content, title = dynamic_content, dynamic_title
+
         if not content:
-            print(f"Failed to extract content from {url}")
+            print(f"Failed to extract content from {url} (All tiers failed)")
             return
 
-        # 2. Embedding Generation (Step 1에서 만든 클래스 활용)
-        vector = embedder.encode(content) # (1, 1024)
+        # 3단계: 임베딩 및 저장
+        vector = embedder.encode(content)
         
-        # 3. Save Metadata to SQLite
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "INSERT INTO bookmarks (url, title, content, created_at) VALUES (?, ?, ?, ?)",
-            (url, title, content, datetime.now())
-        )
-        self.conn.commit()
-        
-        # 4. Save Vector to FAISS
-        self.index.add(vector.astype('float32'))
-        
-        # 5. Persistence
-        faiss.write_index(self.index, self.index_path)
-        print(f"Successfully indexed: {title}")
-
-
-    def search(self, query_vector, top_k=5):
-        distances, indices = self.index.search(query_vector.astype('float32'), top_k)
-        
-        results = []
-        for idx in indices[0]:
-            if idx == -1: continue
-            # rowid는 1부터 시작하므로 FAISS index_id(0부터 시작)에 +1
-            cursor = self.conn.execute("SELECT url, title FROM bookmarks WHERE id = ?", (int(idx) + 1,))
-            results.append(cursor.fetchone())
-        return results
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO bookmarks (url, title, content, created_at) VALUES (?, ?, ?, ?)",
+                (url, title, content, datetime.now())
+            )
+            self.conn.commit()
+            
+            self.index.add(vector.astype('float32'))
+            faiss.write_index(self.index, self.index_path)
+            print(f"Successfully indexed: {title}")
+            
+        except sqlite3.IntegrityError:
+            print(f"Skipping duplicate URL: {url}")
