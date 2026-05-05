@@ -52,15 +52,23 @@ class IKGIndexer:
                 else route.continue_())
 
             try:
-                await page.goto(url, wait_until="networkidle", timeout=30000)
+                # 수정: networkidle 대신 domcontentloaded 사용 및 타임아웃 단축
+                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                # 본문 렌더링을 위한 최소한의 추가 대기 (선택 사항)
+                await page.wait_for_timeout(2000)
+
                 # 렌더링된 HTML을 trafilatura로 다시 정밀 추출
                 raw_html = await page.content()
                 content = trafilatura.extract(raw_html)
                 title = await page.title()
+
                 return content, title
+            
             except Exception as e:
                 print(f"Dynamic scraping failed for {url}: {e}")
+
                 return None, None
+            
             finally:
                 await browser.close()
 
@@ -87,6 +95,7 @@ class IKGIndexer:
         vector = embedder.encode(content)
         
         try:
+            # DB 저장 로직 유지
             cursor = self.conn.cursor()
             cursor.execute(
                 "INSERT INTO bookmarks (url, title, content, created_at) VALUES (?, ?, ?, ?)",
@@ -95,8 +104,15 @@ class IKGIndexer:
             self.conn.commit()
             
             self.index.add(vector.astype('float32'))
-            faiss.write_index(self.index, self.index_path)
-            print(f"Successfully indexed: {title}")
-            
+            # 수정: 여기서 faiss.write_index를 매번 호출하지 않고 삭제합니다 (I/O 병목 제거)
+            print(f"Successfully indexed in memory: {title}")
+
         except sqlite3.IntegrityError:
-            print(f"Skipping duplicate URL: {url}")
+            # Skipping duplicate URL
+            pass
+
+
+    def save_index(self):
+        """인덱싱 완료 후 한 번에 파일로 저장하는 메서드 추가"""
+        faiss.write_index(self.index, self.index_path)
+        print(f"Index successfully saved to {self.index_path}")

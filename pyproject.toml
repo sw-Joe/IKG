@@ -10,6 +10,7 @@ dependencies = [
     "onnxruntime>=1.25.1",
     "optimum[exporters,onnxruntime]>=2.1.0",
     "playwright>=1.59.0",
+    "rank-bm25>=0.2.2",
     "tokenizers>=0.22.2",
     "trafilatura>=2.0.0",
 ]

@@ -1,10 +1,14 @@
 import asyncio
 import json
+import logging
 import os
 
 from embedder import BGEEmbedder
 from IKGindexer import IKGIndexer
 
+
+
+logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
 
 
 def extract_bookmarks(node):
@@ -24,7 +28,7 @@ def extract_bookmarks(node):
 async def run_indexing():
     # 설정
     json_file_path = "bookmarks-2026-01-18.json"
-    model_path = "./bge-m3-onnx-int8"
+    model_path = "./model/bge-m3-onnx-int8"
     file_name = "model_quantized.onnx" # 양자화 모델 파일명 확인
     
     print("엔진 초기화 중...")
@@ -46,8 +50,11 @@ async def run_indexing():
             await indexer.add_document(bm['uri'], embedder)
 
     # 전체 혹은 일부 슬라이싱 처리
-    tasks = [sem_task(bm) for bm in all_bookmarks[:20]] 
+    tasks = [sem_task(bm) for bm in all_bookmarks[1500:2065]] # 예: 50개씩 끊어서 테스트
     await asyncio.gather(*tasks)
+
+    # 추가: 모든 작업이 끝난 후 디스크에 인덱스 파일 기록
+    indexer.save_index() 
 
     print("\n인덱싱 작업이 완료되었습니다.")
 
