@@ -15,3 +15,7 @@ bge-m3-onnx-int8/
 
 # bookmarks json
 *.json
+
+# db, vector index
+*.db
+*.index
