@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# onnx runtime embedding model file
+bge-m3-onnx/
+bge-m3-onnx-int8/
+
+# bookmarks json
+*.json
