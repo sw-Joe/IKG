@@ -1,16 +1,13 @@
-import asyncio
-from datetime import datetime
 import os
-
 import sqlite3
+from datetime import datetime
+
 import faiss
-import numpy as np
 import trafilatura
 from playwright.async_api import async_playwright
 
 
-
-class IKGIndexer:
+class Indexer:
     def __init__(self, db_path="ikg_metadata.db", index_path="ikg_vector.index", dim=1024):
         self.db_path = db_path
         self.index_path = index_path

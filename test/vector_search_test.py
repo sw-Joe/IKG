@@ -1,6 +1,6 @@
-import numpy as np
 from embedder import BGEEmbedder
-from IKGindexer import IKGIndexer
+from indexer import Indexer
+
 
 def test_vector_search():
     # 1. 초기화
@@ -9,7 +9,7 @@ def test_vector_search():
     
     print("--- 엔진 및 인덱스 로드 중 ---")
     embedder = BGEEmbedder(model_path=model_path, file_name=file_name)
-    indexer = IKGIndexer()
+    indexer = Indexer()
     
     # 2. 테스트 쿼리 입력
     # 검색어를 바꾸어가며 테스트해보세요.

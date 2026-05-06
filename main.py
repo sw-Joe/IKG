@@ -1,12 +1,9 @@
 import asyncio
 import json
 import logging
-import os
 
 from embedder import BGEEmbedder
-from IKGindexer import IKGIndexer
-
-
+from indexer import Indexer
 
 logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
 
@@ -33,9 +30,9 @@ async def run_indexing():
     
     print("엔진 초기화 중...")
     embedder = BGEEmbedder(model_path=model_path, file_name=file_name)
-    indexer = IKGIndexer()
+    indexer = Indexer()
     
-    with open(json_file_path, "r", encoding="utf-8") as f:
+    with open(json_file_path, encoding="utf-8") as f:
         bookmark_data = json.load(f)
     
     all_bookmarks = extract_bookmarks(bookmark_data)

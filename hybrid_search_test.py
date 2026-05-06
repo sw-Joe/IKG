@@ -1,13 +1,13 @@
 from hybrid_search import HybridSearcher
 
 
-
 def test_hybrid():
     searcher = HybridSearcher()
     
     while True:
         query = input("\n하이브리드 검색어 입력 (종료: q): ")
-        if query.lower() == 'q': break
+        if query.lower() == 'q':
+            break
         
         results = searcher.search(query, top_n=5)
         

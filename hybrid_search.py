@@ -1,14 +1,14 @@
-import numpy as np
 import sqlite3
-import faiss
 
+import faiss
+import numpy as np
 from rank_bm25 import BM25Okapi
+
 from embedder import BGEEmbedder
 
 
-
 class HybridSearcher:
-    def __init__(self, db_path="ikg_metadata.db", index_path="ikg_vector.index", model_path="./model/bge-m3-onnx-int8"):
+    def __init__(self, db_path="db/ikg_metadata.db", index_path="db/ikg_vector.index", model_path="./model/bge-m3-onnx-int8"):
         # 1. 자원 로드
         self.conn = sqlite3.connect(db_path)
         self.index = faiss.read_index(index_path)

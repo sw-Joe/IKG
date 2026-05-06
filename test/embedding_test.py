@@ -2,8 +2,6 @@ import numpy as np
 from optimum.onnxruntime import ORTModelForFeatureExtraction
 from transformers import AutoTokenizer
 
-
-
 # 양자화 모델 경로 또는 원본 ONNX 경로
 model_path = "./bge-m3-onnx-int8" 
 

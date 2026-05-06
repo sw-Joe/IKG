@@ -5,7 +5,6 @@ import onnxruntime as ort
 from transformers import AutoTokenizer
 
 
-
 class BGEEmbedder:
     def __init__(self, model_path: str, file_name: str = "model.onnx"):
         """
