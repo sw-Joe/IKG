@@ -1,4 +1,4 @@
-from hybrid_search import HybridSearcher
+from hybrid_search_v2 import HybridSearcher
 
 
 def test_hybrid():
