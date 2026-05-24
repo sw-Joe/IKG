@@ -1,8 +1,12 @@
-from hybrid_search_v2 import HybridSearcher
+from hybrid_search.hybrid_search_v2 import HybridSearcher
+from hybrid_search.native_sparse_embedding_search import SearcherNativeSparse
+from hybrid_search.rank_scaled_score_fusion import HybridSearcherV3RankScaled
+from hybrid_search.two_stage_cascading_ensemble import HybridSearcherV3Stage1
 
 
 def test_hybrid():
     searcher = HybridSearcher()
+    # searcher = SearcherNativeSparse()
     
     while True:
         query = input("\n하이브리드 검색어 입력 (종료: q): ")

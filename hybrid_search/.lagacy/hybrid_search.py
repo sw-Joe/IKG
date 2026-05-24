@@ -4,7 +4,7 @@ import faiss
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from embedder import BGEEmbedder
+from core.embedder import BGEEmbedder
 
 
 class HybridSearcher:
