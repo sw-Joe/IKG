@@ -9,7 +9,7 @@ from core.embedder import BGEEmbedder
 
 
 
-class HybridSearcher:
+class HybridSearcherV2:
     def __init__(
         self,
         db_path="db/ikg_metadata.db",

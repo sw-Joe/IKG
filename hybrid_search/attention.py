@@ -1,12 +1,12 @@
 import re
 import sqlite3
 from datetime import datetime
+
 import faiss
 import numpy as np
 from rank_bm25 import BM25Okapi
 
 from core.embedder import BGEEmbedder
-
 
 
 class AttentionHybridSearcher:
@@ -139,7 +139,7 @@ class AttentionHybridSearcher:
             bm25_scores_norm = bm25_scores
 
         # 3. [Attention 핵심] 런타임 동적 가중치 산출
-        alpha, beta, attn_energy = self.compute_dynamic_attention_weights(query_vec[0])
+        alpha, beta, attn_energy = self._compute_dynamic_attention_weights(query_vec[0])
 
         # 4. 동적 가중치가 주입된 통합 스코어링 루프
         combined_results = []
