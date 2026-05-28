@@ -1,0 +1,186 @@
+$ uv run v3_test.py
+warning: `VIRTUAL_ENV=/home/joe/PROJECT/IKG-search-proto/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+============================================================
+ [IKG-Search] 하이브리드 검색 알고리즘 대조 실험 벤치마크 v3
+============================================================
+1: Baseline v2 (정적 가중치 합성 + 최신성 감쇄 + 렉시컬 게이트)
+2: v3 후보 1 (2-Stage Cascading 앙상블 파이프라인)
+3: v3 후보 2 (순위 변조형 가중치 합산)
+4: v3 후보 3 (BGE-M3 Native Sparse Embedding 활용)
+5: v4 확장안 (Attention 기반 동적 가중치 융합 - 전역 루프형)
+6: v3 최종안 (레이어 분리형 차세대 하이브리드 파이프라인)  # [추가]
+============================================================
+테스트할 모듈 번호를 선택하세요 (1~6): 6
+[SYSTEM] v3 최종안 (레이어 분리형 통합) 모듈을 초기화합니다.
+The tokenizer you are loading from './model/bge-m3-onnx-int8' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+
+[V3_FINAL] 검색어 입력 (종료: 'q' 또는 엔터)
+------------------------------------------------------------
+
+검색 질의어 입력 >>  머신러닝의 기초 
+[1] 머신러닝의 역사 | 인사이트리포트 | 삼성SDS
+    URL: https://www.samsungsds.com/kr/insights/1232749_4627.html
+    [Scores] Final: 0.7992 | Lexical: 0.9168 | Semantic: 0.6507
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.558 | Dynamic Beta: 0.442 | Attn Energy: 0.5777
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.4024
+    Snippet: 머신러닝은 여러 산업 분야 및 연구에 있어서 매우 중요한 주제 중 하나입니다. 머신러닝은 1949년 Hebb이 Hebbian Learning Theory를 발표하는 것으로 시작되었습니다. 이후 1952년에 IBM에서...
+------------------------------------------------------------
+[2] [인공지능] ANN, DNN, CNN, RNN 개념과 차이
+    URL: https://ebbnflow.tistory.com/119
+    [Scores] Final: 0.6937 | Lexical: 0.7278 | Semantic: 0.6507
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.558 | Dynamic Beta: 0.442 | Attn Energy: 0.5777
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.4024
+    Snippet: 인공지능(Artificial Intelligence)는 인간의 지능이 갖고 있는 기능을 갖춘 컴퓨터 시스템을 뜻하며, 인간의 지능을 기계 등에 인공적으로 구현한 것을 말합니다. 머신러닝(Machine Learning...
+------------------------------------------------------------
+[3] 결정계수 R-Squared
+    URL: https://modulabs.co.kr/blog/r-squared/
+    [Scores] Final: 0.6516 | Lexical: 0.6522 | Semantic: 0.6507
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.558 | Dynamic Beta: 0.442 | Attn Energy: 0.5777
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.4024
+    Snippet: 캠프 AI 교육 아이펠 AI 엔지니어 - AI 기초 (모집중) AI 리서처 - AI 심화 (모집중) 직장인 액티브러닝 캠프 AI/LLM 데이터 분석 - 비즈니스 인사이트 도출 (모집중) 바이브코딩 서비스 기획/개발 ...
+------------------------------------------------------------
+[4] 홈 - Zero Math AI
+    URL: https://zeromathai.com/
+    [Scores] Final: 0.633 | Lexical: 0.6189 | Semantic: 0.6507
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.558 | Dynamic Beta: 0.442 | Attn Energy: 0.5777
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.4024
+    Snippet: All Courses 글은 「서울대학교 삼성 AI Expert 과정」강의 내용을 바탕으로 정리한 글입니다. 복잡한 수학 공식이 없어도 AI를 이해할 수 있다는 믿음으로 이 공간을 시작했습니다. AI의 기초부터 최신 ...
+------------------------------------------------------------
+[5] 초보자를 위한 파이썬 300제
+    URL: https://wikidocs.net/book/922
+    [Scores] Final: 0.558 | Lexical: 1.0 | Semantic: 0.0
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.558 | Dynamic Beta: 0.442 | Attn Energy: 0.5777
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.4024
+    Snippet: 파이썬 기초 문법을 배웠다고 해서 누구나 프로그래밍에 익숙해지는 것은 아닙니다. 프로그래밍에 익숙해지기까지 많은 문제를 풀어보고 익숙해지는 것이 필요합니다. 파이썬 300제는 파이썬 기초 문법과 관련된 문제들을 제공...
+------------------------------------------------------------
+
+검색 질의어 입력 >> ONNX runtime background inference pipeline
+[1] 모델 파일 입력/출력 구조 파악 사이트 'Netron'
+    URL: https://blaewood.tistory.com/28
+    [Scores] Final: 0.806 | Lexical: 1.0 | Semantic: 0.5591
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.5599 | Dynamic Beta: 0.4401 | Attn Energy: 0.5803
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.3789
+    Snippet: | 일 | 월 | 화 | 수 | 목 | 금 | 토 | |---|---|---|---|---|---|---| | 1 | 2 | ||||| | 3 | 4 | 5 | 6 | 7 | 8 | 9 | | 10 | 11 | 12...
+------------------------------------------------------------
+[2] AutoBE Guide Documents
+    URL: https://autobe.dev/
+    [Scores] Final: 0.715 | Lexical: 0.8375 | Semantic: 0.5591
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.5599 | Dynamic Beta: 0.4401 | Attn Energy: 0.5803
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.3789
+    Snippet: Every line compiles Every time Production-ready backends from natural language. How it works Five phases, zero manual st...
+------------------------------------------------------------
+[3] DeepWiki | AI documentation you can talk to, for every repo
+    URL: https://deepwiki.org/
+    [Scores] Final: 0.635 | Lexical: 0.6946 | Semantic: 0.5591
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.5599 | Dynamic Beta: 0.4401 | Attn Energy: 0.5803
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.3789
+    Snippet: Visual Studio Code 🤗 Transformers: the model-definition framework for state-of-the-art machine learning models in text, ...
+------------------------------------------------------------
+[4] GitHub - wrtnlabs/autobe: AI Vibe Coding Agent of TS backend server, enhanced by compiler skills, generating 100% working code
+    URL: https://github.com/wrtnlabs/autobe
+    [Scores] Final: 0.6178 | Lexical: 0.664 | Semantic: 0.5591
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.5599 | Dynamic Beta: 0.4401 | Attn Energy: 0.5803
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.3789
+    Snippet: Describe your backend requirements in natural language through AutoBE's chat interface. AutoBE will analyze your require...
+------------------------------------------------------------
+[5] CPU 보안 취약점을 공격하는 아주 구체적인 원리
+    URL: https://parksb.github.io/article/31.html
+    [Scores] Final: 0.5176 | Lexical: 0.485 | Semantic: 0.5591
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.5599 | Dynamic Beta: 0.4401 | Attn Energy: 0.5803
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.3789
+    Snippet: CPU 보안 취약점을 공격하는 아주 구체적인 원리 멜트다운, 스펙터 페이퍼 읽기 지난 5월 인텔 CPU의 새로운 보안 취약점이 보고됐다. MDS(Microarchitectural Data Sampling)라고 불리는...
+------------------------------------------------------------
+
+검색 질의어 입력 >> SQLite row_factory index error migration
+[1] Documentation Search Documentation Search Changelog .showhide { margin-left: 0; padding-left: 0; list-style-type: none; } .showhide > li { padding-left: 1em; text-indent: -1em; } .showhide > li li { padding-left: 0; text-indent: 0; padding-top: 1ex; padding-bottom: 1ex; } .showhide ul { display: none; list-style-type: disc; } .showhide > li > a { text-decoration: none; color: black; cursor: pointer; } .sh_mark { width: 1em; } .sh_link { font-weight: bold; } .docsearch { margin: auto; width: 450px; padding-bottom: 1.5em; } function showhide(n){ var ul = document.getElementById("sh_sub_"+n) var mk = document.getElementById("sh_mark_"+n) if( ul.style.display!="block" ){ ul.style.display = "block"; mk.innerHTML = "▼"; } else { ul.style.display = "none"; mk.innerHTML = "►"; } } if( !location.origin || !location.origin.match || !location.origin.match(/http/) ){ document.getElementById("docsearch").style.display = "none"; } ▼ Document Lists And Indexes Alphabetical Listing Of All Documents Website Keyword Index Permuted Title Index ► Overview Documents About SQLite → A high-level overview of what SQLite is and why you might be interested in using it. Appropriate Uses For SQLite → This document describes situations where SQLite is an appropriate database engine to use versus situations where a client/server database engine might be a better choice. Distinctive Features → This document enumerates and describes some of the features of SQLite that make it different from other SQL database engines. Quirks of SQLite → This document is a short list of some unusual features of SQLite that tend to cause misunderstandings and confusion. The list includes both deliberate innovations and "misfeatures" that are retained only for backwards compatibility. How SQLite Is Tested → The reliability and robustness of SQLite is achieved in large part by thorough and careful testing. This document identifies the many tests that occur before every release of SQLite. Copyright → SQLite is in the public domain. This document describes what that means and the implications for contributors. Frequently Asked Questions → The title of the document says all... Books About SQLite → A list of independently written books about SQLite. ► Programming Interfaces SQLite In 5 Minutes Or Less → A very quick introduction to programming with SQLite. Introduction to the C/C++ API → This document introduces the C/C++ API. Users should read this document before the C/C++ API Reference Guide linked below. How To Compile SQLite → Instructions and hints for compiling SQLite C code and integrating that code with your own application. C/C++ API Reference → This document describes each API function separately. Result and Error Codes → A description of the meanings of the numeric result codes returned by various C/C++ interfaces. Application-Defined SQL Function → An overview of the C-language interfaces used to create new application-defined SQL functions in SQLite. Tcl API → A description of the TCL interface bindings for SQLite. SQLite Android Bindings → Information on how to deploy your own private copy of SQLite on Android, bypassing the built-in SQLite, but using the same Java interface. System.Data.SQLite → C#/.NET bindings for SQLite ► SQL Language Documentation SQL Syntax → This document describes the SQL language that is understood by SQLite. Pragma commands → This document describes SQLite performance tuning options and other special purpose database commands. Core SQL Functions → General-purpose built-in scalar SQL functions. Aggregate SQL Functions → General-purpose built-in aggregate SQL functions. Date and Time SQL Functions → SQL functions for manipulating dates and times. Window Functions → SQL Window functions. Generated Columns → Stored and virtual columns in table definitions. DataTypes → SQLite version 3 introduces the concept of manifest typing, where the type of a value is associated with the value itself, not the column that it is stored in. This page describes data typing for SQLite version 3 in further detail. Indexes On Expressions → Indexes in SQLite do not have to be over just plain table columns. Expressions can also be indexed. Row Values → SQLite supports comparisons, including inequality comparisons, between tuples of values, call "row values". This document explains. STRICT Tables → A STRICT table in SQLite does rigid type enforcement, in order to more closely mimic the behavior of other SQL database engines. ► Extensions JSON Functions → SQL functions for creating, parsing, and querying JSON content. FTS5 - Full Text Search → A description of the SQLite Full Text Search (FTS5) extension. FTS3 - Full Text Search → A description of the SQLite Full Text Search (FTS3) extension. R-Tree Module → A description of the SQLite R-Tree extension. An R-Tree is a specialized data structure that supports fast multi-dimensional range queries often used in geospatial systems. Sessions → The Sessions extension allows change to an SQLite database to be captured in a compact file which can be reverted on the original database (to implement "undo") or transferred and applied to another similar database. Run-Time Loadable Extensions → A general overview on how run-time loadable extensions work, how they are compiled, and how developers can create their own run-time loadable extensions for SQLite. Dbstat Virtual Table → The DBSTAT virtual table reports on the sizes and geometries of tables storing content in an SQLite database, and is the basis for the sqlite3_analyzer utility program. Csv Virtual Table → The CSV virtual table allows SQLite to directly read and query RFC 4180 formatted files. Carray → CARRAY is a table-valued function that allows C-language arrays to be used in SQL queries. generate_series → A description of the generate_series() table-valued function. Spellfix1 → The spellfix1 extension is an experiment in doing spelling correction for full-text search. Zipfile → A [virtual table] with accompanying support functions that can read and write a ZIP archive as if it were a database. The IEEE754 Extension → A set of SQL functions for encoding and decoding IEEE-754 floating point numbers. The Decimal Extension → A set of functions for doing arbitrary-precision decimal arithmetic, including expanding IEEE-754 floating point values to their exact decimal representation. The UINT Collating Sequence → A collating sequence that sorts text with embedded numbers in numeric order. The Percentile Extension → An implementation of aggregate functions: median(), percentile(), percentile_cont(), and percentile_disc(). ► Features 8+3 Filenames → How to make SQLite work on filesystems that only support 8+3 filenames. Autoincrement → A description of the AUTOINCREMENT keyword in SQLite, what it does, why it is sometimes useful, and why it should be avoided if not strictly necessary. Backup API → The online-backup interface can be used to copy content from a disk file into an in-memory database or vice versa and it can make a hot backup of a live database. This application note gives examples of how. Error and Warning Log → SQLite supports an "error and warning log" design to capture information about suspicious and/or error events during operation. Embedded applications are encouraged to enable the error and warning log to help with debugging application problems that arise in the field. This document explains how to do that. Foreign Key Support → This document describes the support for foreign key constraints introduced in version 3.6.19. Indexes On Expressions → Notes on how to create indexes on expressions instead of just individual columns. Internal versus External Blob Storage → Should you store large BLOBs directly in the database, or store them in files and just record the filename in the database? This document seeks to shed light on that question. Limits In SQLite → This document describes limitations of SQLite (the maximum length of a string or blob, the maximum size of a database, the maximum number of tables in a database, etc.) and how these limits can be altered at compile-time and run-time. Memory-Mapped I/O → SQLite supports memory-mapped I/O. Learn how to enable memory-mapped I/O and about the various advantages and disadvantages to using memory-mapped I/O in this document. Multi-threaded Programs and SQLite → SQLite is safe to use in multi-threaded programs. This document provides the details and hints on how to maximize performance. Null Handling → Different SQL database engines handle NULLs in different ways. The SQL standards are ambiguous. This (circa 2003) document describes how SQLite handles NULLs in comparison with other SQL database engines. Partial Indexes → A partial index is an index that only covers a subset of the rows in a table. Learn how to use partial indexes in SQLite from this document. Shared Cache Mode → Version 3.3.0 and later supports the ability for two or more database connections to share the same page and schema cache. This feature is useful for certain specialized applications. Unlock Notify → The "unlock notify" feature can be used in conjunction with shared cache mode to more efficiently manage resource conflict (database table locks). URI Filenames → The names of database files can be specified using either an ordinary filename or a URI. Using URI filenames provides additional capabilities, as this document describes. WITHOUT ROWID Tables → The WITHOUT ROWID optimization …
+    URL: https://sqlite.org/docs.html
+    [Scores] Final: 0.7671 | Lexical: 1.0 | Semantic: 0.5393
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.4944 | Dynamic Beta: 0.5056 | Attn Energy: 0.4925
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.4343
+    Snippet: About SQLite→ A high-level overview of what SQLite is and why you might be interested in using it. Appropriate Uses For ...
+------------------------------------------------------------
+[2] 브랜치 리베이스 | Git tutorial | Nulab
+    URL: https://backlog.com/git-tutorial/kr/stepup/stepup2_8.html
+    [Scores] Final: 0.5107 | Lexical: 0.4815 | Semantic: 0.5393
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.4944 | Dynamic Beta: 0.5056 | Attn Energy: 0.4925
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.4343
+    Snippet: 브랜치 리베이스 issue3 브랜치를 메인 브랜치에 통합하는 또 다른 접근 방식은 git rebase 명령입니다. 리베이스를 사용하면 이 가이드의 앞에서 설명한 것처럼 기록 트리를 정리할 수 있습니다. 이전 병합을 ...
+------------------------------------------------------------
+[3] Docker Compose로 Django 프로젝트 셋업
+    URL: https://www.daleseo.com/docker-compose-django/
+    [Scores] Final: 0.5104 | Lexical: 0.4808 | Semantic: 0.5393
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.4944 | Dynamic Beta: 0.5056 | Attn Energy: 0.4925
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.4343
+    Snippet: Docker Compose로 Django 프로젝트 셋업 최근에 많은 Django 프로젝트가 Docker를 이용해서 컨테이너(container) 기반으로 개발되고 테스트, 배포되고 있습니다. 이번 포스팅에서는 Dock...
+------------------------------------------------------------
+[4] 2-02 모델로 데이터베이스 관리하기
+    URL: https://wikidocs.net/175967
+    [Scores] Final: 0.5096 | Lexical: 0.4792 | Semantic: 0.5393
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.4944 | Dynamic Beta: 0.5056 | Attn Energy: 0.4925
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.4343
+    Snippet: [완성 소스] : https://github.com/pahkey/fastapi-book/tree/v2.02[변경 내역] : https://github.com/pahkey/fastapi-book/commit/72d63...
+------------------------------------------------------------
+[5] 티켓팅 서비스 동시성 문제 해결하기 - 2. 구매 제한 수량 초과 문제
+    URL: https://velog.io/@jeong_hun_hui/%ED%8B%B0%EC%BC%93%ED%8C%85-%EC%84%9C%EB%B9%84%EC%8A%A4-%EB%8F%99%EC%8B%9C%EC%84%B1-%EB%AC%B8%EC%A0%9C-%ED%95%B4%EA%B2%B0%ED%95%98%EA%B8%B0-2.-%EA%B5%AC%EB%A7%A4-%EC%A0%9C%ED%95%9C-%EC%88%98%EB%9F%89-%EC%B4%88%EA%B3%BC-%EB%AC%B8%EC%A0%9C
+    [Scores] Final: 0.4267 | Lexical: 0.3116 | Semantic: 0.5393
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.4944 | Dynamic Beta: 0.5056 | Attn Energy: 0.4925
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.4343
+    Snippet: 이전 글에서 티켓팅 서비스를 구현한 뒤 부하 테스트를 진행하면서 두 가지 동시성 문제를 발견했다. 그 중 첫 번째 문제를 다양한 방식을 비교해본 뒤 낙관적 락을 통해 해결했다. 이번에는 1인당 티켓 구매 제한 수량을...
+------------------------------------------------------------
+
+검색 질의어 입력 >> 개인 건강 관리를 위한 수면 주기 및 생체 시계 최적화 
+[1] 워치페이스 스튜디오
+    URL: https://namu.wiki/w/%EC%9B%8C%EC%B9%98%ED%8E%98%EC%9D%B4%EC%8A%A4%20%EC%8A%A4%ED%8A%9C%EB%94%94%EC%98%A4
+    [Scores] Final: 0.7362 | Lexical: 1.0 | Semantic: 0.4759
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.4966 | Dynamic Beta: 0.5034 | Attn Energy: 0.4955
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.2675
+    Snippet: 워치페이스 스튜디오 Watchface Studio く 애플리케이션 정보 개발 및 유통 타겟 플랫폼 Wear OS Powered by Samsung (Wear OS 포함) API 28이상 | 워치페이스 스튜디오는 We...
+------------------------------------------------------------
+[2] 대입정보포털
+    URL: https://www.adiga.kr/jbp/jnf/jobInfoDetail.do?menuId=PCJBPJNF2000&searchCrSeClsfCd=D999&searchCrCd=K000001074
+    [Scores] Final: 0.5711 | Lexical: 0.6675 | Semantic: 0.4759
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.4966 | Dynamic Beta: 0.5034 | Attn Energy: 0.4955
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.2675
+    Snippet: 통신장비기사 연구직 및 공학 기술직 > 통신·방송송출 장비 기사 > 통신장비기사 [ 정보제공 : 한국고용정보원 고용24(구 워크넷) ] | 하는 일 | 무선중계기시스템, 유선통신장비·무선통신장비, 위성통신망 등의 장...
+------------------------------------------------------------
+[3] NPU - 6. NPU 최적화 기법
+    URL: https://gangdonggil.tistory.com/830
+    [Scores] Final: 0.5637 | Lexical: 0.6527 | Semantic: 0.4759
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.4966 | Dynamic Beta: 0.5034 | Attn Energy: 0.4955
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.2675
+    Snippet: 2025. 3. 14. 22:20ㆍ정보기술/하드웨어 6. NPU 최적화 기법 NPU(Neural Processing Unit)는 AI 모델을 더 빠르고 효율적으로 실행하기 위해 다양한 최적화 기법을 적용할 수 있습니...
+------------------------------------------------------------
+[4] 데이터 과학과 머신 러닝 비교: 차이점은 무엇인가요? | IBM
+    URL: https://www.ibm.com/kr-ko/think/topics/data-science-vs-machine-learning
+    [Scores] Final: 0.5441 | Lexical: 0.6132 | Semantic: 0.4759
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.4966 | Dynamic Beta: 0.5034 | Attn Energy: 0.4955
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.2675
+    Snippet: Think 뉴스레터를 통해 AI, 자동화, 데이터 등 가장 중요하고 흥미로운 업계 동향에 대한 최신 소식을 받아보세요. IBM 개인정보 보호정책을 참조하세요. 데이터 과학은 오늘날의 방대한 데이터 세트에서 가치를 추...
+------------------------------------------------------------
+[5] 머신 러닝에서 학습률이란 무엇인가요? | IBM
+    URL: https://www.ibm.com/kr-ko/think/topics/learning-rate
+    [Scores] Final: 0.5344 | Lexical: 0.5936 | Semantic: 0.4759
+    [Factors] Time Decay: 1.0 | Lexical Gate: 1.0
+    [V3_FINAL 코어 어텐션] Dynamic Alpha: 0.4966 | Dynamic Beta: 0.5034 | Attn Energy: 0.4955
+    [V3_FINAL 외곽 검문소] 1위 보증 Rank Penalty: 0.2675
+    Snippet: 전문가가 전하는 최신 AI 트렌드 가장 중요하고 흥미로운 AI 뉴스에 대한 선별된 인사이트를 확인하세요. 주간 Think 뉴스레터를 구독하세요. IBM 개인정보 보호정책을 참조하세요. 학습률은 머신 러닝 모델이 최적...
+------------------------------------------------------------
