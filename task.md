@@ -3,64 +3,67 @@
 현재 프로젝트는 기존 3개의 개별 저장소를 하나의 monorepo로 통합하는
 중간 단계에 있다.
 
-- `apps/bookmark-graphview`: FE 브라우저 확장 / 새 탭 시작 페이지
-- `apps/async-worker`: BE API 및 비동기 워커
-- `packages/ikg-core`: AI inference, 인덱싱, 검색 코어
+- `apps/graphview`: FE 브라우저 확장 / 새 탭 시작 페이지
+- `apps/async_worker`: BE API 및 비동기 워커
+- `packages/ai_core`: AI inference, 인덱싱, 검색 코어
 
 첫 번째 목표는 루트 디렉토리 기준으로 설치, 실행, 테스트가 가능한
 최소 monorepo 개발환경을 만드는 것이다.
 
 ## 1. Monorepo 구조 확정
 
-- [ ] 현재 최상위 구조를 유지할지 확정한다.
-  - `apps/bookmark-graphview`
-  - `apps/async-worker`
-  - `packages/ikg-core`
-- [ ] 루트 `README.md`에 각 workspace의 역할을 문서화한다.
+- [x] 현재 최상위 구조를 유지할지 확정한다.
+  - `apps/graphview`
+  - `apps/async_worker`
+  - `packages/ai_core`
+- [x] 루트 `README.md`에 각 workspace의 역할을 문서화한다.
 - [ ] 루트 `main.py`의 역할을 결정한다.
   - 임시 실행 스크립트로 유지
   - `scripts/`로 이동
   - 패키지 CLI로 전환
 - [x] `.gitignore`에 남아 있는 merge conflict marker를 제거한다.
-- [ ] Python, Node, 모델 파일, DB 파일, 빌드 산출물 ignore 규칙을 통합한다.
+- [x] Python, Node, 모델 파일, DB 파일, 빌드 산출물 ignore 규칙을 통합한다.
 
 ## 2. Python 패키지 구조 정리
 
-- [ ] `packages/ikg-core`를 import 가능한 Python 패키지로 만든다.
-- [ ] 패키지 import 이름을 정한다.
-  - 권장: `ikg_core`
-- [ ] 필요하다면 소스 파일을 패키지 디렉토리 구조로 이동한다.
-- [ ] 현재 깨질 수 있는 local import를 정리한다.
+- [x] `packages/ai_core`를 import 가능한 Python 패키지로 만든다.
+- [x] 패키지 import 이름을 정한다.
+  - 결정: `ai_core`
+- [x] 필요하다면 소스 파일을 패키지 디렉토리 구조로 이동한다.
+  - `packages/ai_core/src/ai_core`
+- [x] 현재 깨질 수 있는 local import를 정리한다.
   - `from embedder import BGEEmbedder`
   - `from indexer import Indexer`
   - `from core.embedder import BGEEmbedder`
-- [ ] package import 방식으로 통일한다.
-  - 예: `from ikg_core.embedder import BGEEmbedder`
-  - 예: `from ikg_core.indexer import Indexer`
+- [x] package import 방식으로 통일한다.
+  - 예: `from ai_core.embedder import BGEEmbedder`
+  - 예: `from ai_core.indexer import Indexer`
 - [ ] 수동 실행용 스크립트와 자동화 테스트를 분리한다.
 
 ## 3. Python 버전 및 의존성 통합
 
-- [ ] monorepo에서 사용할 Python 버전을 하나로 결정한다.
-- [ ] 루트 `.python-version`, 루트 `pyproject.toml`,
-      `apps/async-worker/.python-version`을 맞춘다.
-- [ ] 루트 `uv` workspace를 사용할지 결정한다.
-- [ ] 의존성을 역할별로 분리한다.
+- [x] monorepo에서 사용할 Python 버전을 하나로 결정한다.
+  - 결정: Python 3.13
+- [x] 루트 `.python-version`, 루트 `pyproject.toml`,
+      앱/패키지 `pyproject.toml`의 Python 버전 요구사항을 맞춘다.
+- [x] 루트 `uv` workspace를 사용할지 결정한다.
+  - 결정: 루트 `uv` workspace 사용
+- [x] 의존성을 역할별로 분리한다.
   - Core: `faiss-cpu`, `onnxruntime`, `transformers`, `rank-bm25`,
     `trafilatura`, `playwright`
   - BE: `fastapi`, `uvicorn`, `celery`, `redis`, `pydantic`
   - Dev: `pytest`, `ruff`
-- [ ] `apps/async-worker/pyproject.toml`에 누락된 의존성을 추가한다.
+- [x] `apps/async_worker/pyproject.toml`에 누락된 의존성을 추가한다.
 - [ ] 루트에서 clean install이 가능한지 검증한다.
 
 ## 4. Core와 Backend 경계 정의
 
-- [ ] `ikg-core`가 외부에 제공할 public API를 정의한다.
+- [ ] `ai_core`가 외부에 제공할 public API를 정의한다.
   - `BGEEmbedder`
   - `Indexer`
   - `HybridSearcher`
   - 북마크 추출 유틸리티
-- [ ] `apps/async-worker`는 core의 public API만 사용하도록 정리한다.
+- [ ] `apps/async_worker`는 core의 public API만 사용하도록 정리한다.
 - [ ] 가능한 범위에서 하드코딩된 경로를 제거한다.
 - [ ] 환경 변수 또는 설정값을 도입한다.
   - `IKG_DB_PATH`
@@ -132,7 +135,7 @@
 
 - [ ] non-interactive core 테스트를 pytest 테스트로 정리한다.
 - [ ] `input()`을 사용하는 수동 테스트는 `scripts/`로 이동하거나 manual test로 표시한다.
-- [ ] `ikg_core` import smoke test를 추가한다.
+- [ ] `ai_core` import smoke test를 추가한다.
 - [ ] BE API smoke test를 추가한다.
 - [ ] FAISS/SQLite 무결성에 대한 최소 테스트를 추가한다.
 - [ ] FE build 검증을 추가한다.
@@ -144,7 +147,7 @@
 
 ## 10. 문서 정리
 
-- [ ] 루트 `README.md`를 monorepo 기준으로 다시 작성한다.
+- [x] 루트 `README.md`를 monorepo 기준으로 다시 작성한다.
 - [ ] 필요한 도구와 버전을 문서화한다.
 - [ ] 설치 방법을 문서화한다.
 - [ ] FE dev server 실행 방법을 문서화한다.
