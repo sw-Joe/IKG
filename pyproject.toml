@@ -1,0 +1,43 @@
+[project]
+name = "vector-search-proto"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "faiss-cpu>=1.13.2",
+    "fastapi>=0.136.1",
+    "onnxruntime>=1.25.1",
+    "optimum[exporters,onnxruntime]>=2.1.0",
+    "playwright>=1.59.0",
+    "rank-bm25>=0.2.2",
+    "tokenizers>=0.22.2",
+    "trafilatura>=2.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.12",
+]
+
+
+[tool.ruff]
+# 한 줄의 최대 길이 (Black 스타일인 88자 또는 팀 규약에 따름)
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+# 검사할 규칙 세트 선택
+# E: pycodestyle, F: Pyflakes, I: isort(임포트 정렬), 
+# B: flake8-bugbear(잠재적 버그), UP: pyupgrade(최신 문법 권장)
+select = ["E", "F", "I", "B", "UP", "N"]
+ignore = ["E501"] # 줄 길이는 포매터가 처리하므로 린트 에러에서는 제외
+
+[tool.ruff.lint.isort]
+# 임포트 정렬 시 특정 라이브러리를 최상단으로 올리는 등의 세부 설정
+known-first-party = ["my_project_module"]
+
+[tool.ruff.format]
+# 포매터 상세 설정 (기본적으로 Black과 호환됨)
+quote-style = "double"
+indent-style = "space"

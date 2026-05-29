@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Logs
 logs
 *.log
@@ -22,3 +23,27 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+=======
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# onnx runtime embedding model file
+model/
+bge-m3-onnx/
+bge-m3-onnx-int8/
+
+# bookmarks json
+*.json
+
+# db, vector index
+*.db
+*.index
+>>>>>>> temp-ai/main
