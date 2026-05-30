@@ -2,8 +2,8 @@ import asyncio
 import json
 import logging
 
-from embedder import BGEEmbedder
-from indexer import Indexer
+from ai_core.core.embedder import BGEEmbedder
+from ai_core.core.indexer import Indexer
 
 logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
 

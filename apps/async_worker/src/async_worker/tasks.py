@@ -3,7 +3,8 @@ import sqlite3
 import faiss
 import numpy as np
 from celery import Celery, Task
-from embedder import BGEEmbedder
+
+from ai_core.core.embedder import BGEEmbedder
 
 # 1. Celery 앱 인스턴스 정의 및 브로커 바인딩 (대안 A 모드용)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")

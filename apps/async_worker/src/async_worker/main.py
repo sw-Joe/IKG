@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from async_worker.schemas import BookmarkCreateRequest, TaskReceiptResponse
 
 # ai_core 작업공간 패키지 내부 절대경로 임포트 바인딩
-from hybrid_search import HybridSearcher
+from ai_core.hybrid_search import HybridSearcher
 
 # 런타임 큐 모드 감지 (기본값: EMBEDDED / 확장 옵션: CELERY)
 QUEUE_MODE = os.getenv("QUEUE_MODE", "EMBEDDED")

@@ -4,7 +4,6 @@ version = "0.2.0"
 description = "IKG workspace"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
 
 [tool.uv.workspace]
 members = [

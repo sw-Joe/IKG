@@ -1,3 +1,4 @@
+import os
 import re
 import sqlite3
 from datetime import datetime
@@ -6,7 +7,7 @@ import faiss
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from core.embedder import BGEEmbedder
+from ai_core.core.embedder import BGEEmbedder
 
 
 class HybridSearcher:
@@ -22,11 +23,10 @@ class HybridSearcher:
         zero_hits_threshold=0.10, # 3단계 최종 Zero-Hits 판정 임계값
         embedder=None
     ):
-        import os
         # 1. 인프라 자원 로드
         db_path = db_path or os.getenv("IKG_DB_PATH", "db/ikg_metadata.db")
         index_path = index_path or os.getenv("IKG_INDEX_PATH", "db/ikg_vector.index")
-        model_path = model_path or os.getenv("IKG_MODEL_PATH", "./model/bge-m3-onnx-int8")
+        model_path = model_path or os.getenv("IKG_MODEL_PATH", "model/bge-m3-onnx-int8")
         model_file = os.getenv("IKG_MODEL_FILE", "model_quantized.onnx")
 
         self.conn = sqlite3.connect(db_path)

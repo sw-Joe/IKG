@@ -5,6 +5,7 @@ description = "IKG AI inference, indexing, and search core"
 requires-python = ">=3.13"
 dependencies = [
     "faiss-cpu>=1.13.2",
+    "celery>=5.6.3",
     "numpy>=2.3.5",
     "onnxruntime>=1.25.1",
     "optimum[exporters,onnxruntime]>=2.1.0",
