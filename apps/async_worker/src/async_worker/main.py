@@ -2,7 +2,11 @@ import os
 import sqlite3
 import uuid
 from fastapi import FastAPI, HTTPException, status, BackgroundTasks
-from async_worker.schemas import BookmarkCreateRequest, TaskReceiptResponse
+
+from async_worker.schemas import BookmarkCreateRequest, TaskReceiptResponse, SearchResponse, SearchResultEntry
+from ai_core import HybridSearcher
+
+
 
 # 큐 모드 감지 (기본값은 대안 B인 'EMBEDDED'로 제어하되, 'CELERY' 모드의 여지를 남겨둠)
 QUEUE_MODE = os.getenv("QUEUE_MODE", "EMBEDDED")
@@ -134,3 +138,90 @@ def create_bookmark(request: BookmarkCreateRequest, background_tasks: Background
         )
     finally:
         conn.close()
+
+_searcher_instance = None
+_searcher_last_loaded = 0.0
+
+def get_searcher() -> HybridSearcher:
+    global _searcher_instance, _searcher_last_loaded
+    
+    # 1. DB 및 Index 파일 존재 여부 및 변경 시간 체크
+    db_mtime = 0.0
+    index_mtime = 0.0
+    index_path = os.getenv("IKG_INDEX_PATH", "db/ikg_vector.index")
+    
+    if os.path.exists(DB_PATH):
+        db_mtime = os.path.getmtime(DB_PATH)
+    if os.path.exists(index_path):
+        index_mtime = os.path.getmtime(index_path)
+        
+    max_mtime = max(db_mtime, index_mtime)
+    
+    # 2. 리로드 판단: 미초기화 상태이거나 물리 파일 변경이 감지된 경우
+    if _searcher_instance is None or max_mtime > _searcher_last_loaded:
+        print(f"[SEARCH ENGINE] 데이터 변경 감지 (mtime: {max_mtime} > last_loaded: {_searcher_last_loaded}). 검색기를 리로드합니다.")
+        
+        # 3. 임베더 재사용 최적화: Embedded worker 인스턴스가 존재하면 해당 임베더를 공유하여 ONNX 로딩 오버헤드 0화
+        shared_embedder = None
+        if QUEUE_MODE == "EMBEDDED" and 'worker_instance' in globals():
+            shared_embedder = worker_instance.embedder
+            
+        try:
+            zero_hits = float(os.getenv("IKG_ZERO_HITS_THRESHOLD", "0.0"))
+            _searcher_instance = HybridSearcher(
+                db_path=DB_PATH,
+                index_path=index_path,
+                embedder=shared_embedder,
+                zero_hits_threshold=zero_hits
+            )
+            _searcher_last_loaded = max_mtime
+        except Exception as e:
+            print(f"[SEARCH ENGINE ERROR] 검색기 리로드 중 오류 발생: {e}")
+            if _searcher_instance is None:
+                raise e
+                
+    return _searcher_instance
+
+@app.get(
+    "/api/search",
+    response_model=SearchResponse,
+    summary="하이브리드 융합(V3) 기술 자산 검색 및 다차원 정렬"
+)
+def search_bookmarks(q: str, limit: int = 5):
+    """
+    쿼리를 인입받아 어텐션 기반 하이브리드 점수를 연산하고 정렬된 결과를 반환합니다.
+    """
+    if not q or not q.strip():
+        return SearchResponse(query="", results=[])
+        
+    try:
+        searcher = get_searcher()
+        results = searcher.search(q, top_n=limit)
+        
+        # schemas.SearchResultEntry 형식에 맞게 리스트 변환
+        validated_results = []
+        for doc in results:
+            validated_results.append(
+                SearchResultEntry(
+                    id=doc["id"],
+                    url=doc["url"],
+                    title=doc["title"],
+                    content=doc["content"],
+                    created_at=doc["created_at"],
+                    score_final=doc["score_final"],
+                    score_lex=doc["score_lex"],
+                    score_sem=doc["score_sem"],
+                    factor_time=doc["factor_time"],
+                    factor_gate=doc["factor_gate"],
+                    dynamic_alpha=doc["dynamic_alpha"],
+                    dynamic_beta=doc["dynamic_beta"],
+                    attn_energy=doc["attn_energy"],
+                    factor_rank_penalty=doc.get("factor_rank_penalty")
+                )
+            )
+        return SearchResponse(query=q, results=validated_results)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"[인프라 에러] 검색 엔진 처리 중 실패: {str(e)}"
+        )

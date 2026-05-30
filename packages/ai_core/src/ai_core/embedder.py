@@ -12,8 +12,11 @@ class BGEEmbedder:
         """
         model_full_path = os.path.join(model_path, file_name)
         if not os.path.exists(model_full_path):
-            raise FileNotFoundError(f"모델 파일을 찾을 수 없습니다: {model_full_path}")
+            print(f"[WARN] ONNX 모델 파일을 찾을 수 없습니다 ({model_full_path}). Mock DUMMY 모드로 동작합니다.")
+            self.dummy_mode = True
+            return
 
+        self.dummy_mode = False
         # 1. ONNX Runtime 세션 초기화 (CPU 최적화 설정)
         sess_options = ort.SessionOptions()
         sess_options.intra_op_num_threads = os.cpu_count() or 4 # CPU 코어 수에 맞게 스레드 할당
@@ -27,6 +30,15 @@ class BGEEmbedder:
         """
         입력 텍스트를 1024차원의 정규화된 벡터로 변환합니다.
         """
+        if self.dummy_mode:
+            # 해시 함수 기반으로 텍스트별 고유하고 결정론적인 모의 벡터 생성 (L2 정규화 준수)
+            import hashlib
+            h = hashlib.sha256(text.encode('utf-8')).digest()
+            np.random.seed(int.from_bytes(h[:4], byteorder='big'))
+            vec = np.random.randn(1, 1024).astype('float32')
+            norm = np.linalg.norm(vec, axis=1, keepdims=True)
+            return vec / (norm + 1e-9)
+
         # 3. 텍스트 전처리 (Max length 8192 토큰 대응)
         inputs = self.tokenizer(
             text, 

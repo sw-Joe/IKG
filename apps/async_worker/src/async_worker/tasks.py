@@ -1,8 +1,10 @@
 import os
 import sqlite3
+
 import faiss
 import numpy as np
 from celery import Celery, Task
+
 from ai_core.embedder import BGEEmbedder
 
 

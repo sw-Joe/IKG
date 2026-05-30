@@ -12,21 +12,35 @@ from ai_core.embedder import BGEEmbedder
 class FinalHybridSearcherV3:
     def __init__(
         self,
-        db_path="db/ikg_metadata.db",
-        index_path="db/ikg_vector.index",
-        model_path="./model/bge-m3-onnx-int8",
+        db_path=None,
+        index_path=None,
+        model_path=None,
         decay_lambda=0.001,      # 최신성 감쇄 상수
         temperature=1.5,          # 어텐션 소프트맥스 민감도 조절 인자
         stage1_k=40,             # 1단계 후보군 추출 크기
         fast_track_threshold=0.92, # 1단계 강제 구출 코사인 유사도 기준선
-        zero_hits_threshold=0.10  # 3단계 최종 Zero-Hits 판정 임계값
+        zero_hits_threshold=0.10, # 3단계 최종 Zero-Hits 판정 임계값
+        embedder=None
     ):
+        import os
         # 1. 인프라 자원 로드
+        db_path = db_path or os.getenv("IKG_DB_PATH", "db/ikg_metadata.db")
+        index_path = index_path or os.getenv("IKG_INDEX_PATH", "db/ikg_vector.index")
+        model_path = model_path or os.getenv("IKG_MODEL_PATH", "./model/bge-m3-onnx-int8")
+        model_file = os.getenv("IKG_MODEL_FILE", "model_quantized.onnx")
+
         self.conn = sqlite3.connect(db_path)
-        self.index = faiss.read_index(index_path)
-        self.embedder = BGEEmbedder(
-            model_path=model_path, file_name="model_quantized.onnx"
-        )
+        if os.path.exists(index_path):
+            self.index = faiss.read_index(index_path)
+        else:
+            self.index = faiss.IndexFlatIP(1024)
+
+        if embedder:
+            self.embedder = embedder
+        else:
+            self.embedder = BGEEmbedder(
+                model_path=model_path, file_name=model_file
+            )
 
         # 2. 레이어별 분리형 하이퍼파라미터 정의
         self.decay_lambda = decay_lambda
@@ -37,15 +51,22 @@ class FinalHybridSearcherV3:
 
         # 3. 데이터셋 로드 및 무결성 정합성 체크
         self.documents = self._load_all_documents()
-        if len(self.documents) != self.index.ntotal:
-            raise ValueError(f"정합성 오류: DB 문서 수({len(self.documents)})와 FAISS 인덱스 벡터 수({self.index.ntotal})가 불일치합니다.")
+        
+        # 빈 데이터베이스/인덱스인 경우 예외를 발생시키지 않고 빈 전처리
+        if len(self.documents) == 0 or self.index.ntotal == 0:
+            self.documents = []
+            self.bm25 = None
+            self.context_mean_vector = np.zeros(1024)
+        else:
+            if len(self.documents) != self.index.ntotal:
+                raise ValueError(f"정합성 오류: DB 문서 수({len(self.documents)})와 FAISS 인덱스 벡터 수({self.index.ntotal})가 불일치합니다.")
 
-        # 4. 전처리 및 렉시컬 인덱스(BM25) 빌드
-        tokenized_corpus = [self._preprocess_tech_text(doc["content"]) for doc in self.documents]
-        self.bm25 = BM25Okapi(tokenized_corpus)
+            # 4. 전처리 및 렉시컬 인덱스(BM25) 빌드
+            tokenized_corpus = [self._preprocess_tech_text(doc["content"]) for doc in self.documents]
+            self.bm25 = BM25Okapi(tokenized_corpus)
 
-        # 5. [Core Ranking 전제조건] 전역 컨텍스트 베이스라인 벡터 캐싱 (O(1) 검색 보장)
-        self.context_mean_vector = self._compute_context_mean()
+            # 5. [Core Ranking 전제조건] 전역 컨텍스트 베이스라인 벡터 캐싱 (O(1) 검색 보장)
+            self.context_mean_vector = self._compute_context_mean()
 
 
     def _load_all_documents(self):
@@ -96,6 +117,8 @@ class FinalHybridSearcherV3:
 
 
     def search(self, query: str, top_n=5):
+        if not self.documents or self.bm25 is None or self.index.ntotal == 0:
+            return []
         tokenized_query = self._preprocess_tech_text(query)
         if not tokenized_query:
             return []
