@@ -45,3 +45,7 @@ bge-m3-onnx-int8/
 *.njsproj
 *.sln
 *.sw?
+
+# markdown file
+*.md
+!README.md
