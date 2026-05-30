@@ -6,10 +6,10 @@ import faiss
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from ai_core.embedder import BGEEmbedder
+from core.embedder import BGEEmbedder
 
 
-class FinalHybridSearcherV3:
+class HybridSearcher:
     def __init__(
         self,
         db_path=None,

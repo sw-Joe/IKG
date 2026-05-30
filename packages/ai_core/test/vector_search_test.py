@@ -1,5 +1,5 @@
-from ai_core.embedder import BGEEmbedder
-from ai_core.indexer import Indexer
+from embedder import BGEEmbedder
+from indexer import Indexer
 
 
 def test_vector_search():

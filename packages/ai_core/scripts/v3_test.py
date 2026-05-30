@@ -1,9 +1,9 @@
-from ai_core.hybrid_search.attention import AttentionHybridSearcher
-from ai_core.hybrid_search.converged import FinalHybridSearcherV3
-from ai_core.hybrid_search.lagacy.hybrid_search_v2 import HybridSearcherV2
-from ai_core.hybrid_search.native_sparse_embedding_search import SearcherNativeSparse
-from ai_core.hybrid_search.rank_scaled_score_fusion import HybridSearcherV3RankScaled
-from ai_core.hybrid_search.two_stage_cascading_ensemble import HybridSearcherV3Stage1
+from hybrid_search_lagacy.attention import AttentionHybridSearcher
+from hybrid_search import HybridSearcher
+from hybrid_search_lagacy.hybrid_search_v2 import HybridSearcherV2
+from hybrid_search_lagacy.native_sparse_embedding_search import SearcherNativeSparse
+from hybrid_search_lagacy.rank_scaled_score_fusion import HybridSearcherV3RankScaled
+from hybrid_search_lagacy.two_stage_cascading_ensemble import HybridSearcherV3Stage1
 
 
 def test_hybrid_benchmark():
@@ -42,7 +42,7 @@ def test_hybrid_benchmark():
             version_tag = "V4_ATTENTION"
         elif choice == '6':
             print("[SYSTEM] v3 최종안 (레이어 분리형 통합) 모듈을 초기화합니다.")
-            searcher = FinalHybridSearcherV3()
+            searcher = HybridSearcher()
             version_tag = "V3_FINAL"
         else:
             print("[ERROR] 올바른 번호를 선택하세요 (1~6).")

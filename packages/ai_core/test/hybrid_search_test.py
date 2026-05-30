@@ -1,4 +1,4 @@
-from ai_core.hybrid_search.hybrid_search_v2 import HybridSearcher
+from hybrid_search_lagacy.hybrid_search_v2 import HybridSearcher
 
 
 def test_hybrid():

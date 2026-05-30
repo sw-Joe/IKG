@@ -1,5 +1,5 @@
 [project]
-name = "ai-core"
+name = "ai_core"
 version = "0.1.0"
 description = "IKG AI inference, indexing, and search core"
 requires-python = ">=3.13"
