@@ -31,19 +31,27 @@ export const BookmarkGraph: React.FC<BookmarkGraphProps> = ({ highlightNodes }) 
   useEffect(() => {
     if (!containerRef.current || loading || rawNodes.length === 0) return;
 
+    // apps/FE/src/components/BookmarkGraph.tsx 수정안 스니펫
+
     if (!graphInstanceRef.current) {
-      const graph = ForceGraph()(containerRef.current)
+    const graph = ForceGraph()(containerRef.current)
         .graphData({ nodes: rawNodes, links: rawEdges })
         .nodeId('id')
-        .nodeVal(4)
+        // 1. 그룹별 노드 크기 차등화 (폴더 가중치 부여)
+        .nodeVal((node: any) => node.group === 'folder' ? 7 : 3.5)
+        // 2. 그룹별/상태별 노드 색상 분기
+        .nodeColor((node: any) => {
+        if (node.group === 'folder') return '#60a5fa'; // Slate Blue
+        return '#94a3b8'; // Muted Slate
+        })
         .nodeLabel('title')
-        .linkColor(() => 'rgba(255, 255, 255, 0.08)')
+        // 3. 엣지 가시성 최적화 (연한 그리드 톤)
+        .linkColor(() => 'rgba(148, 163, 184, 0.12)')
         .linkWidth(1)
-        .backgroundColor('#303841'); // 요구사항 반영: 칠흑색 기조 정형화
+        // 4. 전역 테마 변수 대역에 맞춘 배경색 단일화
+        .backgroundColor('#1e293b'); 
 
-      graphInstanceRef.current = graph;
-    } else {
-      graphInstanceRef.current.graphData({ nodes: rawNodes, links: rawEdges });
+    graphInstanceRef.current = graph;
     }
   }, [loading, rawNodes, rawEdges]);
 
@@ -66,7 +74,7 @@ export const BookmarkGraph: React.FC<BookmarkGraphProps> = ({ highlightNodes }) 
     );
   }
 
-  // [교정 완결]: 기존 인라인 100vw, 100vh 절대 수치를 박멸하고 부모 플렉스 구역을 100% 완벽히 추종하도록 격리
+  // [교정 완결]: 기존 인라인 100vw, 100vh 절대 수치를 제거, 부모 플렉스 구역을 100% 완벽히 추종하도록 격리
   return (
     <div 
       ref={containerRef} 
