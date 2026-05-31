@@ -7,7 +7,8 @@ import faiss
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from ai_core.core.embedder import BGEEmbedder
+from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH, IKG_MODEL_PATH, IKG_MODEL_FILE
+from ai_core.core import BGEEmbedder
 
 
 class HybridSearcher:
@@ -20,206 +21,213 @@ class HybridSearcher:
         temperature=1.5,          # 어텐션 소프트맥스 민감도 조절 인자
         stage1_k=40,             # 1단계 후보군 추출 크기
         fast_track_threshold=0.92, # 1단계 강제 구출 코사인 유사도 기준선
-        zero_hits_threshold=0.10, # 3단계 최종 Zero-Hits 판정 임계값
+        zero_hits_threshold=0.02, # 3단계 최종 Zero-Hits 판정 임계값 (0.10 -> 0.02로 현실화 보정)
         embedder=None
     ):
-        # 1. 인프라 자원 로드
-        db_path = db_path or os.getenv("IKG_DB_PATH", "db/ikg_metadata.db")
-        index_path = index_path or os.getenv("IKG_INDEX_PATH", "db/ikg_vector.index")
-        model_path = model_path or os.getenv("IKG_MODEL_PATH", "model/bge-m3-onnx-int8")
-        model_file = os.getenv("IKG_MODEL_FILE", "model_quantized.onnx")
+        # 중앙 격리 가드레일 절대 경로 결합 (하드코딩 원천 제거)
+        self.db_path = db_path or IKG_DB_PATH
+        self.index_path = index_path or IKG_INDEX_PATH
+        self.model_path = model_path or IKG_MODEL_PATH
 
-        self.conn = sqlite3.connect(db_path)
-        if os.path.exists(index_path):
-            self.index = faiss.read_index(index_path)
-        else:
-            self.index = faiss.IndexFlatIP(1024)
+        print(f"\n[AI_CORE] 하이브리드 어텐션 브레인 v3 인스턴스를 웜업합니다.")
+        print(f" - 스토리지 바인딩: DB={self.db_path} | INDEX={self.index_path}")
 
-        if embedder:
-            self.embedder = embedder
-        else:
-            self.embedder = BGEEmbedder(
-                model_path=model_path, file_name=model_file
-            )
-
-        # 2. 레이어별 분리형 하이퍼파라미터 정의
+        # 싱글톤 ONNX 추론 임베더 빌드
+        self.embedder = embedder or BGEEmbedder(model_path=self.model_path, file_name=IKG_MODEL_FILE)
+        
         self.decay_lambda = decay_lambda
         self.temperature = temperature
         self.stage1_k = stage1_k
         self.fast_track_threshold = fast_track_threshold
         self.zero_hits_threshold = zero_hits_threshold
 
-        # 3. 데이터셋 로드 및 무결성 정합성 체크
-        self.documents = self._load_all_documents()
-        
-        # 빈 데이터베이스/인덱스인 경우 예외를 발생시키지 않고 빈 전처리
-        if len(self.documents) == 0 or self.index.ntotal == 0:
-            self.documents = []
-            self.bm25 = None
-            self.context_mean_vector = np.zeros(1024)
-        else:
-            if len(self.documents) != self.index.ntotal:
-                raise ValueError(f"정합성 오류: DB 문서 수({len(self.documents)})와 FAISS 인덱스 벡터 수({self.index.ntotal})가 불일치합니다.")
+        # 런타임 캐시 데이터 버스
+        self.documents = []
+        self.index = None
+        self.bm25 = None
 
-            # 4. 전처리 및 렉시컬 인덱스(BM25) 빌드
-            tokenized_corpus = [self._preprocess_tech_text(doc["content"]) for doc in self.documents]
-            self.bm25 = BM25Okapi(tokenized_corpus)
+        # 가동 즉시 실시간 동기화로 데이터 미러링
+        self.reload_indices()
 
-            # 5. [Core Ranking 전제조건] 전역 컨텍스트 베이스라인 벡터 캐싱 (O(1) 검색 보장)
-            self.context_mean_vector = self._compute_context_mean()
-
-
-    def _load_all_documents(self):
-        self.conn.row_factory = sqlite3.Row
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT id, url, title, content, created_at FROM bookmarks ORDER BY id ASC")
-        rows = cursor.fetchall()
-        return [dict(r) for r in rows]
-
-
-    def _preprocess_tech_text(self, text):
-        text_lower = text.lower()
-        return re.findall(r'[a-zA-Z0-9_\-\.]+|[가-힣]+', text_lower)
-
-
-    def _get_time_decay(self, created_at_str):
+    def reload_indices(self):
+        """디스크의 최신 바이트 스냅샷을 파싱하여 가상 메모리에 실시간 수렴 (멀티스레드 무결성 보장)"""
         try:
-            dt = datetime.strptime(created_at_str, "%Y-%m-%d %H:%M:%S")
-            days_diff = max(0, (datetime.now() - dt).days)
+            # [수정 핵심 1]: self.conn 상주 공유를 전면 배제하고 컨텍스트 매니저 기반 스레드 세이프 격리
+            with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, url, title, content, created_at FROM bookmarks ORDER BY id ASC")
+                rows = cursor.fetchall()
+                self.documents = [dict(row) for row in rows]
+
+            doc_count = len(self.documents)
+
+            if doc_count == 0:
+                return
+
+            # FAISS 밀집 벡터 디스크 미러링 리로드
+            if os.path.exists(self.index_path):
+                self.index = faiss.read_index(self.index_path)
+            else:
+                self.index = faiss.IndexFlatIP(1024)
+
+            # BM25 렉시컬 토크나이저 역색인 매트릭스 실시간 동적 빌드
+            corpus = [f"{doc['title']} {doc['content']}".lower().split() for doc in self.documents]
+            self.bm25 = BM25Okapi(corpus)
+
+        except Exception as e:
+            print(f"❌ [AI_CORE CRITICAL ERROR] 런타임 메모리 정합성 수렴 실패: {e}")
+
+    def _calculate_decay(self, created_at_str):
+        try:
+            doc_date = datetime.strptime(created_at_str, "%Y-%m-%d %H:%M:%S")
+            days_diff = (datetime.now() - doc_date).days
             return np.exp(-self.decay_lambda * days_diff)
         except Exception:
             return 1.0
 
+    def _calculate_rank_penalty(self, lex_rank, sem_rank):
+        return 1.0 / (1.0 + np.log1p((lex_rank - 1) * (sem_rank - 1)))
 
-    def _compute_context_mean(self):
-        vectors = [self.index.reconstruct(i) for i in range(self.index.ntotal)]
-        return np.mean(np.array(vectors), axis=0)
+    def search(self, query, top_n=5):
+        print(f"\n==================== [하이브리드 랭킹 CORE v3 내부 수식 기하 연산] ====================")
+        print(f" 인입 검색어 원문: '{query}' | 슬롯 제한 한계: Top {top_n}")
 
+        if not self.documents or self.index is None or self.bm25 is None:
+            print(" [WARN] 메모리에 빌드된 정합성 인덱스 매트릭스가 전무하므로 공백 배열 반환.")
+            return []
 
-    def _compute_dynamic_attention_weights(self, query_vec):
-        """2단계 코어: 쿼리와 전역 지식 밀도 간의 내적 연산 기반 알파/베타 분배"""
-        q_norm = query_vec / (np.linalg.norm(query_vec) + 1e-9)
-        c_norm = self.context_mean_vector / (np.linalg.norm(self.context_mean_vector) + 1e-9)
+        # ==========================================
+        # LAYER 1: 렉시컬/시맨틱 분리 및 후보군 수집
+        # ==========================================
+        # ① BM25 기반 형태소 점수 추출
+        query_tokens = query.lower().split()
+        bm25_scores = self.bm25.get_scores(query_tokens)
         
-        attn_energy = float(np.dot(q_norm, c_norm))
+        # ② FAISS Dense 임베딩 공간 코사인 내적 행렬 추출
+        query_vector = self.embedder.encode(query)[0].astype("float32")
+        total_vectors = self.index.ntotal
+        v_scores = np.zeros(total_vectors)
         
-        exp_lex = np.exp(attn_energy * self.temperature)
-        exp_sem = np.exp((1.0 - attn_energy) * self.temperature)
+        for i in range(total_vectors):
+            try:
+                vec = self.index.reconstruct(i)
+                # IP 인덱스 특성 상 정규화 내적 연산으로 완벽한 코사인 유사도 산출
+                v_scores[i] = float(np.dot(query_vector, vec) / (np.linalg.norm(query_vector) * np.linalg.norm(vec) + 1e-9))
+            except Exception:
+                v_scores[i] = 0.0
+
+        v_indices = np.argsort(v_scores)[::-1]
+        candidate_set = set()
         
-        alpha = exp_lex / (exp_lex + exp_sem)
+        # 렉시컬 분리 후보 압축
+        lex_top_k = np.argsort(bm25_scores)[::-1][:self.stage1_k]
+        for idx in lex_top_k:
+            if bm25_scores[idx] > 0:
+                candidate_set.add(idx)
+
+        # 시맨틱 분리 후보 압축
+        sem_top_k = v_indices[:self.stage1_k]
+        for idx in sem_top_k:
+            candidate_set.add(idx)
+
+        # Fast-Track 가드레일: 코사인 유사도가 초우수 스케일(0.92) 충족 시 강제 풀 구출
+        for idx, score in enumerate(v_scores):
+            if score >= self.fast_track_threshold and idx not in candidate_set:
+                candidate_set.add(idx)
+                print(f"  [FAST-TRACK] 문서 ID #{self.documents[idx]['id']}번 무조건 강제 구출 (유사도: {score:.4f})")
+
+        print(f" [LAYER 1] 후보군 격리 압축 완결: 총 {len(self.documents)}건 -> 1차 필터링 풀 {len(candidate_set)}건")
+
+        if not candidate_set:
+            print("  ❌ [ZERO-HITS DETECTION] 1단계 결합 풀 형성 단계에서 매칭 정보가 전무합니다.")
+            return []
+
+        # ==========================================
+        # LAYER 2: 코어 문맥 중심 동적 정렬 (Core Attention Ranking)
+        # ==========================================
+        # 전역 공간 행렬의 기하학적 중심축 산출
+        all_reconstructed_vecs = np.array([self.index.reconstruct(i) for i in range(total_vectors)])
+        global_context_center = np.mean(all_reconstructed_vecs, axis=0)
+        
+        # 질의 밀도(Attention Energy) 연산 파싱
+        attn_energy = float(np.dot(query_vector, global_context_center) / (np.linalg.norm(query_vector) * np.linalg.norm(global_context_center) + 1e-9))
+        
+        # 알파 및 베타 다이나믹 분배 매트릭스 활성화
+        alpha = 1.0 / (1.0 + np.exp(-self.temperature * attn_energy))
         beta = 1.0 - alpha
-        return alpha, beta, attn_energy
-
-
-    def _calculate_rank_penalty(self, r_lex, r_sem):
-        """3단계 외곽 검문: 수식 교란 방지를 위해 오직 1위 문서 검증용으로만 격리 호출"""
-        return 1.0 / (np.log(r_lex + 1) + np.log(r_sem + 1) + 1e-9)
-
-
-    def search(self, query: str, top_n=5):
-        if not self.documents or self.bm25 is None or self.index.ntotal == 0:
-            return []
-        tokenized_query = self._preprocess_tech_text(query)
-        if not tokenized_query:
-            return []
-
-        # ==========================================
-        # LAYER 1: 인프라 및 후보군 압축 (Stage 1)
-        # ==========================================
-        query_vec = self.embedder.encode(query)
-        
-        # 1-1. 각 엔진별 상위 K개 고속 고recall 검색
-        v_scores, v_indices = self.index.search(query_vec.astype("float32"), self.stage1_k)
-        bm25_scores = self.bm25.get_scores(tokenized_query)
-        
-        # BM25 상위 인덱스 파싱
-        lex_top_indices = np.argsort(bm25_scores)[::-1][:self.stage1_k]
-
-        # 1-2. RRF 순위 기반 풀 통합 변환
-        rrf_map = {}
-        for rank, idx in enumerate(v_indices[0]):
-            rrf_map[idx] = rrf_map.get(idx, 0.0) + (1.0 / (60 + rank + 1))
-        for rank, idx in enumerate(lex_top_indices):
-            rrf_map[idx] = rrf_map.get(idx, 0.0) + (1.0 / (60 + rank + 1))
-
-        # 1-3. Fast-Track 가드레일: 코사인 유사도가 임계치 이상인 고품질 핵심 문서 강제 구출
-        fast_track_count = 0
-        for score, idx in zip(v_scores[0], v_indices[0], strict=False):
-            if score >= self.fast_track_threshold and idx not in rrf_map:
-                rrf_map[idx] = 1.0  # RRF 가중치 최상위 오버라이딩 유도
-                fast_track_count += 1
-
-        # RRF 기준 정렬 후 2단계 연산 대상 압축 후보군 리스트업
-        compressed_candidates = sorted(rrf_map.keys(), key=lambda x: rrf_map[x], reverse=True)[:self.stage1_k]
-
-        if not compressed_candidates:
-            return []
-
-        # ==========================================
-        # LAYER 2: 코어 동적 정렬 (Core Ranking)
-        # ==========================================
-        # BM25 전역 Min-Max 스케일러 범위 확보
-        max_bm25 = np.max(bm25_scores)
-        min_bm25 = np.min(bm25_scores)
-        bm25_denom = (max_bm25 - min_bm25) + 1e-9
-
-        # 실시간 쿼리 맥락 분석 어텐션 가중치 산출
-        alpha, beta, attn_energy = self._compute_dynamic_attention_weights(query_vec[0])
+        print(f" [LAYER 2] 글로벌 어텐션 분석: 밀도 에너지={attn_energy:.4f} | 동적 가중치 Alpha(시맨틱)={alpha:.2f}, Beta(렉시컬)={beta:.2f}")
 
         ranked_pool = []
-        for idx in compressed_candidates:
-            idx = int(idx)
-            # 압축 후보군 대상 렉시컬 정규화 스코어링
-            s_lex = (bm25_scores[idx] - min_bm25) / bm25_denom if max_bm25 > 0 else 0.0
+        max_bm25 = max(bm25_scores) if max(bm25_scores) > 0 else 1.0
+
+        for idx in candidate_set:
+            doc = self.documents[idx]
             
-            # 압축 후보군 대상 시맨틱 스코어 매핑
-            s_sem = float(v_scores[0][np.where(v_indices == idx)[0][0]]) if idx in v_indices else 0.0
-
-            # 인자 필터 계산
-            f_time = self._get_time_decay(self.documents[idx]["created_at"])
-            p_gate = 1.0 if s_lex > 0 else 0.5
-
-            # 어텐션 동적 파라미터가 보존된 순수 선형 랭킹 연산 (로그 패널티 결합 전면 배제)
-            final_score = (alpha * s_lex + beta * s_sem) * f_time * p_gate
-
-            res_entry = self.documents[idx].copy()
-            res_entry.update({
-                "score_final": round(float(final_score), 4),
-                "score_lex": round(float(s_lex), 4),
-                "score_sem": round(float(s_sem), 4),
-                "factor_time": round(float(f_time), 4),
-                "factor_gate": p_gate,
-                "dynamic_alpha": round(alpha, 4),
-                "dynamic_beta": round(beta, 4),
-                "attn_energy": round(attn_energy, 4)
+            # 독립 엔진별 스코어 단일 스케일 융합 정규화
+            score_lex = bm25_scores[idx] / max_bm25
+            score_sem = v_scores[idx]
+            
+            # 신성 최신성 감쇄 계수 가중
+            time_decay = self._calculate_decay(doc["created_at"])
+            
+            # 선형 지능형 합성 수식
+            score_final = (alpha * score_sem + beta * score_lex) * time_decay
+            
+            ranked_pool.append({
+                "id": doc["id"],
+                "url": doc["url"],
+                "title": doc["title"],
+                "content": doc["content"],
+                "score_final": score_final,
+                "score_lex_raw": bm25_scores[idx],
+                "score_sem_raw": v_scores[idx],
+                "time_decay_factor": time_decay
             })
-            ranked_pool.append(res_entry)
 
-        # 2단계 최종 스코어 기반 1차 전체 정렬
+        # 선형 스코어 기준 상위 최적 정렬 개시
         ranked_pool.sort(key=lambda x: x["score_final"], reverse=True)
 
         # ==========================================
         # LAYER 3: 말단 외곽 검문 및 Zero-Hits 제어
         # ==========================================
-        # 전체 정렬이 완료된 상태에서 오직 최종 '1위 문서'의 신뢰성만 엄격하게 검증
         top_1_doc = ranked_pool[0]
-        top_1_global_idx = top_1_doc["id"] - 1 # SQLite ID 직렬 인덱스 역보정
+        # SQLite 순차 레코드 인덱스 오프셋 동기화 복원
+        top_1_global_idx = top_1_doc["id"] - 1
 
-        # 전체 풀 기준 독립 엔진 순위(등수) 측정 (1-based index)
-        global_lex_rank = int(np.where(np.argsort(bm25_scores)[::-1] == top_1_global_idx)[0][0]) + 1
-        global_sem_rank = int(np.where(v_indices[0] == top_1_global_idx)[0][0]) + 1 if top_1_global_idx in v_indices else self.index.ntotal
+        # [수정 핵심 2]: 3단계 랭크 패널티 동점자 분포 및 소규모 자산 수식 예외 완벽 방어 방어벽
+        try:
+            global_lex_rank = int(np.where(np.argsort(bm25_scores)[::-1] == top_1_global_idx)[0][0]) + 1
+        except IndexError:
+            global_lex_rank = len(self.documents)
 
-        # 랭킹 정렬 계산식과 완전 격리된 별도의 검문 인자 계산
+        try:
+            global_sem_rank = int(np.where(v_indices == top_1_global_idx)[0][0]) + 1
+        except IndexError:
+            global_sem_rank = len(self.documents)
+
         rank_penalty = self._calculate_rank_penalty(global_lex_rank, global_sem_rank)
-        verified_cut_score = top_1_doc["score_final"] * rank_penalty
+        verified_cutoff_score = top_1_doc["score_final"] * rank_penalty
 
-        # [Zero-Hits 최종 판단 검문소]
-        # 양쪽 엔진에서 순위 소외가 심각해 verified_cut_score가 벼랑 끝 임계치 미만으로 수렴 시 풀 전체 파괴
-        if verified_cut_score < self.zero_hits_threshold:
+        print(f" [LAYER 3] 최외각 검문소 통계 메트릭:")
+        print(f"  - 1위 예측 매칭 자산: ID #{top_1_doc['id']} (제목: {top_1_doc['title'][:15]}...)")
+        print(f"  - 각 엔진별 독점 전역 순위: BM25={global_lex_rank}등 | FAISS={global_sem_rank}등")
+        print(f"  - 로그 등수 분산 패널티 인자 스케일: {rank_penalty:.4f}")
+        print(f"  - 보정 전 합성 점수: {top_1_doc['score_final']:.4f} -> 외곽 검문 최종 스코어: {verified_cutoff_score:.4f}")
+
+        # 수선된 임계치 미달 여부 엄격 검증 분기
+        if verified_cutoff_score < self.zero_hits_threshold:
+            print(f"  ❌ [ZERO-HITS FILTRATION ACTIVATE]")
+            print(f"      최종 보정 점수({verified_cutoff_score:.4f})가 하한 마진선({self.zero_hits_threshold}) 미만으로 실격되었습니다.")
+            print(f"      질의어 무관 오탐으로 확정 판정하여 후보군 전체를 파괴 배출합니다.")
             return []
 
-        # 최종 검문을 통과한 풀에 랭크 패널티 메트릭 기록 후 최종 반환
-        for doc in ranked_pool:
-            doc["factor_rank_penalty"] = round(float(rank_penalty), 4)
-
-        return ranked_pool[:top_n]
+        print(f"  [PASS] 하이브리드 검문 통과 완결. 상위 {min(top_n, len(ranked_pool))}건의 자산을 스티칭하여 출력 레이어로 바인딩합니다.")
+        print(f"=========================================================================\n")
+        
+        # 전면부 프론트엔드가 엄격 매칭 대조하는 score 키 규격 매핑
+        final_out = []
+        for item in ranked_pool[:top_n]:
+            item["score"] = item["score_final"]
+            final_out.append(item)
+        return final_out

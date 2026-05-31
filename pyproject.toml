@@ -1,13 +1,13 @@
 [project]
 name = "ikg"
-version = "0.2.0"
+version = "0.3.0"
 description = "IKG workspace"
 readme = "README.md"
 requires-python = ">=3.13"
 
 [tool.uv.workspace]
 members = [
-    "apps/async_worker",
+    "apps/be_api",
     "packages/ai_core",
 ]
 
@@ -27,7 +27,7 @@ select = ["E", "F", "I", "B", "UP", "N"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["ai_core", "async_worker"]
+known-first-party = ["ai_core", "be_api"]
 
 [tool.ruff.format]
 quote-style = "double"

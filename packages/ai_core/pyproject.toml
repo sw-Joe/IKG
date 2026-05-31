@@ -1,6 +1,6 @@
 [project]
-name = "ai_core"
-version = "0.1.0"
+name = "ai-core"
+version = "0.2.0"
 description = "IKG AI inference, indexing, and search core"
 requires-python = ">=3.13"
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
     "tokenizers>=0.22.2",
     "trafilatura>=2.0.0",
     "transformers>=4.57.3",
+    "python-dotenv>=1.2.2",
 ]
 
 [build-system]

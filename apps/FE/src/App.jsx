@@ -1,5 +1,5 @@
 import BookmarkGraph from './components/BookmarkGraph'; // Now .tsx
-import Search from './components/Search'; // Now .tsx
+import { Search } from './components/Search'; // Now .tsx
 
 function App() {
   return (

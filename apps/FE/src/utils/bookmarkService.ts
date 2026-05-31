@@ -60,7 +60,7 @@ export const bookmarkService = {
    * 3. FAISS 벡터 유사도 매트릭스 연산 기반 실시간 시맨틱 토폴로지 데이터 수신
    * @param threshold 코사인 유사도 하한 가드라인 (기본값: 0.65)
    */
-  async getGraphTopology(threshold: number = 0.65): Promise<GraphTopologyResponse> {
+  async getGraphTopology(threshold: number = 0.85): Promise<GraphTopologyResponse> {
     const response = await fetch(`http://localhost:8000/api/graph?threshold=${threshold}`);
     if (!response.ok) {
       throw new Error("벡터 공간 상의 시맨틱 토폴로지 그래프 맵 동기화에 실패했습니다.");

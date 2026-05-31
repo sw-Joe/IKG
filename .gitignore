@@ -49,3 +49,6 @@ bge-m3-onnx-int8/
 # markdown file
 *.md
 !README.md
+
+# env
+.env
