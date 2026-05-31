@@ -1,94 +1,148 @@
-.hybrid-search-container {
+/* apps/FE/src/components/Search.css */
+
+/* =========================================================================
+   1. 사이드바 프레임 시스템 잠금 (Sidebar Dimensional Anchor)
+   ========================================================================= */
+.ikg-sidebar-container {
+  width: 380px;
+  height: 100%;
+  /* [변경]: 하드코딩된 #09090b 대신 중앙 통제 변수 적용 */
+  background-color: var(--bg-panel); 
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  z-index: 10;
+  box-shadow: 10px 0 30px rgba(15, 23, 42, 0.5);
+}
+
+.sidebar-header-zone {
+  padding: 20px 20px 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.sidebar-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  margin: 0 0 2px 0;
+}
+
+.sidebar-subtitle {
+  font-size: 11px;
+  color: #71717a;
+  margin: 0;
+}
+
+/* 폼 인풋 및 스택 결과 리스트가 사이드바 내부 컨텍스트에서만 가상 스크롤 격리 작동 */
+.sidebar-content-scroll-zone {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.sidebar-content-scroll-zone::-webkit-scrollbar {
+  width: 5px;
+}
+.sidebar-content-scroll-zone::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+}
+
+/* =========================================================================
+   2. 단일 입력 폼 구조 제어
+   ========================================================================= */
+.hybrid-search-core-wrapper {
   width: 100%;
-  max-width: 480px;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.search-form-layout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.search-input-relative-container {
+  position: relative;
+  flex: 1;
+}
+
+.search-input-field {
+  width: 100%;
+  height: 38px;
+  padding: 0 32px 0 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #ffffff;
+  outline: none;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.search-input-field:focus {
+  border-color: #2563eb;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.inner-clear-button {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #52525b;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.inner-clear-button:hover {
+  color: #ffffff;
+}
+
+.search-trigger-button {
+  height: 38px;
+  padding: 0 14px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.search-trigger-button:hover {
+  background: #1d4ed8;
+}
+
+/* =========================================================================
+   3. 결과 리스트 카드 아키텍처
+   ========================================================================= */
+.search-results-viewport-panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-.search-form {
-  display: flex;
-  position: relative;
-  align-items: center;
-  gap: 8px;
-}
-
-.search-input {
-  flex: 1;
-  height: 42px;
-  padding: 0 36px 0 16px;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 14px;
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.search-input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-}
-
-.clear-button {
-  position: absolute;
-  right: 86px;
-  background: none;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 4px;
-}
-
-.search-submit-btn {
-  height: 42px;
-  padding: 0 18px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 8px;
+.panel-headline-title {
+  font-size: 11px;
   font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.search-submit-btn:hover {
-  background: #2563eb;
-}
-
-.search-error-message {
-  color: #ef4444;
-  font-size: 13px;
-  padding: 4px 8px;
-  background: #fef2f2;
-  border-radius: 6px;
-}
-
-.search-results-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.panel-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #475569;
+  color: #3b82f6;
   margin: 0;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #e2e8f0;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
-.results-list {
+.results-list-stack {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -97,88 +151,91 @@
   gap: 10px;
 }
 
-.result-item {
+.result-item-card {
   display: flex;
-  gap: 12px;
-  padding: 10px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
   border-radius: 8px;
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  transition: transform 0.15s ease;
+  /* [변경]: 슬레이트 배경 위에서 카드가 살짝 도드라지도록 명도 스케일 보정 (Slate 800/700 사이 대역) */
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.15s ease;
 }
 
-.result-item:hover {
-  transform: translateY(-1px);
-  background: #f1f5f9;
+.result-item-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
-.result-rank-badge {
+.card-top-identity-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-rank-badge-node {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: #64748b;
-  color: white;
-  border-radius: 50%;
-  font-size: 12px;
+  width: 18px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #a1a1aa;
+  border-radius: 4px;
+  font-size: 10px;
   font-weight: 700;
-  flex-shrink: 0;
 }
 
-.result-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-}
-
-.result-title {
-  font-size: 14px;
+.result-title-link {
+  font-size: 12.5px;
   font-weight: 600;
-  color: #1e293b;
+  color: #f4f4f5;
   text-decoration: none;
-}
-
-.result-title:hover {
-  color: #3b82f6;
-  text-decoration: underline;
-}
-
-.result-snippet {
-  font-size: 12px;
-  color: #64748b;
-  margin: 0;
-  line-height: 1.4;
-}
-
-.result-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-  color: #94a3b8;
-  margin-top: 2px;
-}
-
-.meta-score {
-  font-weight: 600;
-  color: #059669;
-}
-
-.meta-url {
-  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.search-no-results {
-  font-size: 12px;
-  color: #94a3b8;
+.result-title-link:hover {
+  color: #3b82f6;
+}
+
+.result-content-snippet {
+  font-size: 11.5px;
+  color: #a1a1aa;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.card-bottom-metrics-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.metric-badge-final {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #60a5fa;
+}
+
+.sub-metrics-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: #52525b;
+}
+
+.search-error-layer, .zero-hits-placeholder-layer {
+  font-size: 11px;
+  color: #71717a;
+  padding: 14px;
+  border-radius: 6px;
+  border: 1px dashed rgba(255, 255, 255, 0.05);
   text-align: center;
-  padding: 12px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
-  background: #fafafa;
 }
