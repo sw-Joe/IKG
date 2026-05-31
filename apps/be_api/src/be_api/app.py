@@ -1,147 +1,50 @@
-import os
-import sqlite3
-import uuid
-import queue
-import threading
-import numpy as np
-from fastapi import FastAPI, HTTPException, status, BackgroundTasks
+import logging
+from typing import Optional
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+import numpy as np
 
-# 수선된 ai_core 중앙 허브 구성 상수 및 코어 엔진 임포트
-from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH, IKG_MODEL_PATH
-from ai_core.hybrid_search import HybridSearcher
-from be_api.schemas import BookmarkCreateRequest, TaskReceiptResponse
+# 수선된 분할 로깅 설정 모듈 및 코어 임포트
+from be_api.logger_config import setup_logging
+from ai_core import HybridSearcher
 
-QUEUE_MODE = os.getenv("QUEUE_MODE", "EMBEDDED")
 
-app = FastAPI(title="IKG Intelligent Backend API Gateway")
 
-# 크로스 오리진 보안 통신 해제를 위한 CORS 미들웨어 통합 레이어 설정
+# 1. 인스턴스 초기화 전 로깅 서식 파이프라인 수립 가동
+setup_logging()
+logger = logging.getLogger("be_api.app")
+
+# 2. FastAPI ASGI 엔진 수립
+app = FastAPI(title="IKG Hybrid Search Gateway", version="0.4.0")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "chrome-extension://*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 중앙 격리 설정 상수 바인딩
-DB_PATH = IKG_DB_PATH
-INDEX_PATH = IKG_INDEX_PATH
-MODEL_PATH = IKG_MODEL_PATH
-
-print(f"\n[IKG API STARTUP] 백엔드 게이트웨이 서비스 가동 (중앙 설정 동기화 완결)")
-
-# 실시간 동기식 지능형 검색 엔진 인스턴스 싱글톤 웜업
-searcher_engine = HybridSearcher(
-    db_path=DB_PATH,
-    index_path=INDEX_PATH,
-    model_path=MODEL_PATH
-)
-
-# 비동기 인프라 스레드 소비자 큐 초기화 분기
-if QUEUE_MODE == "EMBEDDED":
-    from be_api.tasks import EmbeddedInferenceWorker
-    
-    embedded_task_queue = queue.Queue()
-    worker_instance = EmbeddedInferenceWorker()
-    
-    def _queue_worker_loop():
-        print("[EMBEDDED QUEUE] 단일 프로세스 독립형 스레드 직렬화 큐가 시작되었습니다. (concurrency=1)")
-        while True:
-            try:
-                bookmark_id = embedded_task_queue.get()
-                if bookmark_id is None:
-                    break
-                # 가중 연산 파이프라인 가동
-                worker_instance.execute_inference_pipeline(bookmark_id)
-            except Exception as e:
-                print(f" ❌ [QUEUE ERROR EVENT] 백그라운드 태스크 워커 런타임 장애: {e}")
-            finally:
-                embedded_task_queue.task_done()
-
-    threading.Thread(target=_queue_worker_loop, daemon=True).start()
-else:
-    from be_api.tasks import process_new_bookmark
+# 하이브리드 검색 코어 웜업
+searcher_engine = HybridSearcher()
 
 
-@app.post("/api/bookmarks", response_model=TaskReceiptResponse, status_code=status.HTTP_202_ACCEPTED)
-def create_bookmark(request: BookmarkCreateRequest, background_tasks: BackgroundTasks):
-    print(f"\n[GATEWAY TRAFFIC] 신규 기술 문서 인입 등록 요청 수신")
-    print(f" - 대상 URL: {request.url}")
-    print(f" - 메타 제목: {request.title}")
-    
-    # 스레드 로컬 안전 단발성 커넥션 처리
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "INSERT INTO bookmarks (url, title, content, created_at) VALUES (?, ?, ?, datetime('now', 'localtime'))",
-            (str(request.url), request.title, request.content)
-        )
-        inserted_id = cursor.lastrowid
-        conn.commit()
-        
-        if QUEUE_MODE == "EMBEDDED":
-            generated_task_id = f"local-task-{uuid.uuid4()}"
-            background_tasks.add_task(embedded_task_queue.put, inserted_id)
-            msg = "[Embedded] 파이썬 내장 스레드 세이프 메모리 큐로 인덱싱 태스크가 직렬 인입 위임되었습니다."
-        else:
-            task_receipt = process_new_bookmark.delay(inserted_id)
-            generated_task_id = task_receipt.id
-            msg = "[Celery] 메시지 브로커 분산 인프라 레이어로 비동기 위임이 접수되었습니다."
-            
-        print(f"  -> SQLite 동기 적재 완료. 할당 행 고유식별 번호: #{inserted_id}")
-        
-        return TaskReceiptResponse(
-            message=msg,
-            bookmark_id=inserted_id,
-            task_id=generated_task_id
-        )
-    except Exception as e:
-        conn.rollback()
-        print(f"  ❌ [TRANSACTION CRITICAL ROLLBACK] 메타데이터 적재 예외 실패 복구: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        conn.close()
-
-
-@app.get("/api/search", summary="v3 최종안 동적 어텐션 랭커 기반 실시간 하이브리드 검색")
-def search_bookmarks_endpoint(q: str, limit: int = 5):
-    print(f"\n[GATEWAY TRAFFIC] 실시간 지식 베이스 하이브리드 검색 질의 수신")
-    print(f" - 검색어: '{q}' | 추출 슬롯 제한 한계: {limit}건")
-    
-    if not q.strip():
-        raise HTTPException(status_code=400, detail="검색 질의어가 비어있습니다.")
-    try:
-        # [핵심 수선 사항: 실시간 캐시 동기화 가드]
-        # 검색 API가 호출되는 즉시, 워커 스레드가 디스크에 쓴 최신 바이트 스냅샷을 
-        # 메인 웹서버 스레드 메모리 상으로 실시간 리로드하여 완벽한 실시간 정합성 확정
-        searcher_engine.reload_indices()
-            
-        # v3 최종 융합 검색 연산 파이프라인 기동
-        results = searcher_engine.search(query=q, top_n=limit)
-        
-        print(f"  -> 하이브리드 검색 결과 반환 완료 (수량: {len(results)}건)")
-        return results
-    except Exception as e:
-        print(f"  ❌ [INFERENCE CRASH] 랭킹 추론 연산 중 치명적 장애: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"하이브리드 검색 랭킹 연산 중 장애 발생: {str(e)}"
-        )
-
-
-@app.get("/api/graph", summary="FAISS 벡터 공간 유사도 기반 동적 노드/엣지 토폴로지 추출")
+@app.get("/api/graph")
 def get_similarity_graph_topology(threshold: float = 0.85):
-    print(f"\n[GATEWAY TRAFFIC] 네트워크 시각화 전용 실시간 벡터 엣지 토폴로지 추출 요청")
+    logger.info(f"네트워크 시각화 벡터 엣지 토폴로지 추출 요청 감지 (FE 수신 threshold: {threshold})")
+    
+    if threshold < 0.85:
+        logger.warning(f"인입 임계치({threshold}) 수위 미달로 안전 마진 한계선 0.85로 강제 오버라이드")
+        threshold = 0.85
+
     try:
         searcher_engine.reload_indices()
         documents = searcher_engine.documents
         faiss_index = searcher_engine.index
         total_count = len(documents)
         
-        print(f" - 분석 대상 활성 노드 수: {total_count}개")
+        logger.info(f"토폴로지 분석 매트릭스 웜업 - 수집 노드: {total_count}개 | 필터 임계값: {threshold}")
         
         if total_count == 0:
             return {"nodes": [], "edges": []}
@@ -149,7 +52,6 @@ def get_similarity_graph_topology(threshold: float = 0.85):
         nodes = [{"id": str(doc["id"]), "title": doc["title"], "url": doc["url"]} for doc in documents]
         edges = []
         
-        # FAISS 벡터 대수 행렬 변환 및 코사인 내적 고속 정렬
         vectors = np.array([faiss_index.reconstruct(i) for i in range(total_count)]).astype("float32")
         norms = np.linalg.norm(vectors, axis=1, keepdims=True) + 1e-9
         normalized_vectors = vectors / norms
@@ -165,8 +67,35 @@ def get_similarity_graph_topology(threshold: float = 0.85):
                         "value": round(sim_score, 4)
                     })
                     
-        print(f"  -> 벡터 공간 그래프 수렴 완결 (노드 {len(nodes)}개, 연결선 {len(edges)}개)")
+        logger.info(f"벡터 공간 그래프 수렴 완결 -> 노드: {len(nodes)}개 | 연결선: {len(edges)}개")
         return {"nodes": nodes, "edges": edges}
+        
     except Exception as e:
-        print(f"  ❌ [GRAPH COMPILER CRASH] 행렬 내적 연산 예외 장애: {e}")
-        raise HTTPException(status_code=500, detail=f"그래프 토폴로지 분석 실패: {str(e)}")
+        logger.error(f"그래프 컴파일 연산 중 치명적 행렬 크래시: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="그래프 토폴로지 분석 연산 실패")
+
+
+@app.get("/api/search")
+def search_bookmarks_endpoint(
+    q: Optional[str] = None, 
+    query: Optional[str] = None, 
+    limit: int = 5
+):
+    effective_query = q or query
+    logger.info(f"실시간 하이브리드 검색 요청 수신 -> 명세 분석: q={q} | query={query} | 확정질의어='{effective_query}'")
+    
+    if not effective_query or not effective_query.strip():
+        logger.warning("공백 질의어 인입 유입 차단 빈 배열 즉시 반환 조치")
+        return []
+        
+    try:
+        searcher_engine.reload_indices()
+        results = searcher_engine.search(query=effective_query, top_n=limit)
+        logger.info(f"하이브리드 검색 추론 파이프라인 반환 완결 (출력 볼륨: {len(results)}건)")
+        return results
+    except Exception as e:
+        logger.error(f"하이브리드 검색 추론 연산 중 게이트웨이 예외: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="하이브리드 검색 랭킹 연산 장애")
+
+if __name__ == "__main__":
+    uvicorn.run("be_api.app:app", host="0.0.0.0", port=8000, reload=True)
