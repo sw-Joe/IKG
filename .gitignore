@@ -49,6 +49,9 @@ Thumbs.db
 *.sln
 *.sw?
 
-# 7. 예외 보존 가이드 문서 규칙 (Exceptions)
+# 7. 로그
+*.log
+
+# 8. 예외 보존 가이드 문서 규칙 (Exceptions)
 !README.md
 !.env.example
