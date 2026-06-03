@@ -52,6 +52,9 @@ Thumbs.db
 # 7. 로그
 *.log
 
-# 8. 예외 보존 가이드 문서 규칙 (Exceptions)
+# 8. 사용자 지정 파일
+spec/
+
+# 9. 예외 보존 가이드 문서 규칙 (Exceptions)
 !README.md
 !.env.example
