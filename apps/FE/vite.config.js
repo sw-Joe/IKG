@@ -13,7 +13,7 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    host: true, // 외부 가상 장비나 모바일 테스트 세션 연동망 개방용 가드레일
+    host: false, // 외부 가상 장비나 모바일 테스트 세션 연동망 개방용 가드레일
     strictPort: true,
   },
   // Rolldown 과도기 옵션 경고 제거
