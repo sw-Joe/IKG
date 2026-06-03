@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import "./Search.css";
 
+
 interface SearchResult {
   id: number;
   url: string;
@@ -36,7 +37,7 @@ export const Search: React.FC<SearchComponentProps> = ({ onSearchComplete, onSea
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/search?query=${encodeURIComponent(query.trim())}&limit=5`,
+        `http://127.0.0.1:8000/api/search?query=${encodeURIComponent(query.trim())}&limit=5`,    // query=${...}
         {
           method: "GET",
           headers: {

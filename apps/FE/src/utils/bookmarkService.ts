@@ -48,7 +48,7 @@ export const bookmarkService = {
    */
   async searchBookmarks(query: string, limit: number = 5): Promise<any[]> {
     const response = await fetch(
-      `http://localhost:8000/api/search?q=${encodeURIComponent(query)}&limit=${limit}`
+      `http://localhost:8000/api/search?query=${encodeURIComponent(query)}&limit=${limit}`    // query=${...}
     );
     if (!response.ok) {
       throw new Error("하이브리드 검색 파이프라인 연산 요청에 실패했습니다.");
