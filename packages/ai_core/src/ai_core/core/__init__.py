@@ -1,4 +1,4 @@
 from .embedder import BGEEmbedder
-from .indexer import Indexer
+from .indexer import VectorIndexer
 
-__all__ = ["BGEEmbedder", "Indexer"]
+__all__ = ["BGEEmbedder", "VectorIndexer"]
