@@ -1,142 +1,149 @@
-import os
-import sqlite3
 import logging
+import sqlite3
 from datetime import datetime
+
 import faiss
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH, IKG_MODEL_PATH, IKG_MODEL_FILE
-from ai_core.core import BGEEmbedder
-# 리팩토링 분할 모듈 세션 수입
-from ai_core.search_layers import CandidatePoolExtractor, ContextAttentionRouter, RankPenaltyFilter
+from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH, IKG_MODEL_FILE, IKG_MODEL_PATH
+from ai_core.core.embedder import BGEEmbedder
+
+# from ai_core.search_layers.candidate_pool import CandidatePoolExtractor
+# from ai_core.search_layers.context_attention import ContextAttentionRouter
+# from ai_core.search_layers.rank_filter import RankPenaltyFilter
+from ai_core.search_layers import (
+    CandidatePoolExtractor,
+    ContextAttentionRouter,
+    RankPenaltyFilter,
+)
+
+
 
 logger = logging.getLogger("ai_core.hybrid_search")
 
+
 class HybridSearcher:
+    """CQRS Read 전용: 잠금 경합 프리 구조를 가지며 고해상도 3단계 하이브리드 검색 정렬을 전담하는 매니저"""
     def __init__(
         self,
         db_path=None,
         index_path=None,
         model_path=None,
         decay_lambda=0.001,      
-        temperature=1.5,          
-        stage1_k=40,             
-        fast_track_threshold=0.92, 
-        zero_hits_threshold=0.02,  
-        embedder=None
+        stage1_k=40
     ):
         self.db_path = db_path or IKG_DB_PATH
         self.index_path = index_path or IKG_INDEX_PATH
         self.model_path = model_path or IKG_MODEL_PATH
         self.decay_lambda = decay_lambda
+        self.stage1_k = stage1_k
 
-        logger.info("하이브리드 코어 v3 브레인 인프라 컴포넌트 조립 완료")
-
-        self.embedder = embedder or BGEEmbedder(model_path=self.model_path, file_name=IKG_MODEL_FILE)
+        # 질의어 인코딩 전용 고속 임베더 싱글톤 결합
+        self.embedder = BGEEmbedder(model_path=self.model_path, file_name=IKG_MODEL_FILE)
         
-        # 분할된 세부 연산 계층 전략 객체 주입 (Dependency Injection)
-        self.pool_extractor = CandidatePoolExtractor(stage1_k, fast_track_threshold)
-        self.attention_router = ContextAttentionRouter(temperature)
-        self.rank_filter = RankPenaltyFilter(zero_hits_threshold)
+        # 외부 결합 분할 계층 인스턴스 주입
+        self.pool_extractor = CandidatePoolExtractor()
+        self.attention_router = ContextAttentionRouter()
+        self.rank_filter = RankPenaltyFilter()
+        
+        # 인메모리 매핑 스냅샷 컨텍스트 동기화 빌드
+        self.refresh_context()
+        logger.info("조회 전담 하이브리드 브레인 v3 인프라 동기화 가동 완결")
 
-        self.documents = []
-        self.index = None
-        self.bm25 = None
 
-        self.reload_indices()
-
-    def reload_indices(self):
+    def refresh_context(self):
+        """SQLite 상의 활성 자산(is_deleted=0) 상태 데이터 스냅샷 최신화 및 BM25 렉시컬 어휘집 인메모리 동기화 재빌드"""
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
         try:
-            with sqlite3.connect(self.db_path, timeout=30.0) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute("SELECT id, url, title, content, created_at FROM bookmarks ORDER BY id ASC")
-                rows = cursor.fetchall()
-                self.documents = [dict(row) for row in rows]
-
-            doc_count = len(self.documents)
-            logger.info(f"[ENGINE SYNC] 영속 데이터베이스 레코드 파싱 완료: 총 {doc_count}건 식별")
+            # [핵심 방어 가드] Soft-Delete 처리된 가비지 행은 메모리 인입 단계에서 원천 차단
+            cursor.execute("SELECT id, url, title, content, created_at FROM bookmarks WHERE is_deleted = 0")
+            rows = cursor.fetchall()
             
-            if doc_count == 0:
-                return
+            self.documents = []
+            corpus = []
+            self.doc_id_to_idx = {} # SQLite ID -> 인메모리 배열 오프셋 인덱스 매핑 역추적 장치
+            
+            for idx, row in enumerate(rows):
+                doc_dict = {
+                    "id": row["id"],
+                    "url": row["url"],
+                    "title": row["title"],
+                    "content": row["content"],
+                    "created_at": row["created_at"]
+                }
+                self.documents.append(doc_dict)
+                corpus.append(f"{row['title']} {row['content']}")
+                self.doc_id_to_idx[row["id"]] = idx
+                
+            # 인메모리 단어 분할 렉시컬 인덱스 동적 동기화
+            tokenized_corpus = [doc.lower().split(" ") for doc in corpus]
+            self.bm25 = BM25Okapi(tokenized_corpus) if tokenized_corpus else None
+            
+            # 읽기 전용으로 FAISS IDMap 파일 로드
+            self.index = faiss.read_index(self.index_path)
+        finally:
+            conn.close()
 
-            if os.path.exists(self.index_path):
-                self.index = faiss.read_index(self.index_path)
-                logger.info(f"[ENGINE SYNC] FAISS 벡터 스냅샷 로드 완결 (총 물리 벡터 수: {self.index.ntotal}개)")
-            else:
-                self.index = faiss.IndexFlatIP(1024)
 
-            corpus = [f"{doc['title']} {doc['content']}".lower().split() for doc in self.documents]
-            self.bm25 = BM25Okapi(corpus)
-
-        except Exception:
-            logger.exception("런타임 메모리 정합성 수렴 실패 (크리티컬)")
-
-    def _calculate_decay(self, created_at_str):
-        try:
-            doc_date = datetime.strptime(created_at_str, "%Y-%m-%d %H:%M:%S")
-            days_diff = (datetime.now() - doc_date).days
-            return np.exp(-self.decay_lambda * days_diff)
-        except Exception:
-            return 1.0
-
-    def search(self, query: str, top_n: int = 5) -> list[dict]:
-        logger.info(f"실시간 융합 추론 파이프라인 가동 개시 -> 질의어: '{query}'")
-
-        if not self.documents or self.index is None or self.bm25 is None:
-            logger.error("메모리 상주 인덱스 매트릭스 결손 상태로 추론 즉시 중단")
+    def search(self, query: str, top_n: int = 5) -> list:
+        """Read-Only 파이프라인: 읽기 전용 가상환경에서 3단계 하이브리드 연산 관통"""
+        if not self.documents or not self.bm25:
             return []
 
-        # 1. 렉시컬 토큰 점수 수집
-        query_tokens = query.lower().split()
-        bm25_scores = self.bm25.get_scores(query_tokens)
-        
-        # 2. 온엑스 임베딩 인코딩 수행
-        query_vector = self.embedder.encode(query)[0]
+        # 0. 입력 질의어 수 밀리초 내 고속 Dense 임베딩 수행
+        query_vector = self.embedder.encode(query)[0].astype("float32")
 
-        # =========================================================================
-        # [REFACTOR COUPLING] 분할 계층 레이어 순차 파이프라이닝 전개
-        # =========================================================================
-        # LAYER 1: 후보군 추출 분리
-        candidate_set, v_scores = self.pool_extractor.extract(bm25_scores, self.index, query_vector, self.documents)
-        if not candidate_set:
+        # LAYER 1: 인프라 후보군 추출 및 RRF 압축
+        # 주의: IndexIDMap 검색 결과 반환되는 ID 리스트는 이제 행 번호가 아닌 실제 SQLite의 'bookmark_id' 고유값입니다.
+        candidate_ids, bm25_scores, v_scores = self.pool_extractor.extract(
+            query, query_vector, self.bm25, self.index, self.documents, self.doc_id_to_idx, self.stage1_k
+        )
+
+        if not candidate_ids:
             return []
 
-        # LAYER 2: 글로벌 어텐션 가중치 매트릭스 동적 분배
+        # LAYER 2: 글로벌 어텐션 가중치 매트릭스 동적 분배 (Alpha / Beta 실시간 분배)
         alpha, beta = self.attention_router.calculate_weights(query_vector, self.index)
 
-        # 복합 선형 결합 정렬 가동
         ranked_pool = []
         max_bm25 = max(bm25_scores) if max(bm25_scores) > 0 else 1.0
 
-        for idx in candidate_set:
+        for doc_id in candidate_ids:
+            # 역추적 매퍼를 거쳐 실제 인메모리 메타데이터 로드
+            idx = self.doc_id_to_idx[doc_id]
             doc = self.documents[idx]
+            
             score_lex = bm25_scores[idx] / max_bm25
             score_sem = v_scores[idx]
+            
+            # 시계열 감쇠 수식 연산 결합
             time_decay = self._calculate_decay(doc["created_at"])
             score_final = (alpha * score_sem + beta * score_lex) * time_decay
             
             ranked_pool.append({
                 "id": doc["id"], "url": doc["url"], "title": doc["title"], "content": doc["content"],
-                "score_final": score_final, "score_lex_raw": bm25_scores[idx], "score_sem_raw": v_scores[idx],
-                "time_decay_factor": time_decay
+                "score_final": score_final, "score_lex_raw": bm25_scores[idx], "score_sem_raw": v_scores[idx]
             })
 
+        # 최종 가중 선형 점수 기준 소팅
         ranked_pool.sort(key=lambda x: x["score_final"], reverse=True)
 
-        # LAYER 3: 외곽 패널티 검문 및 Zero-Hits 판정
+        # LAYER 3: 최외각 패널티 검문 및 Zero-Hits 판정 무결성 검증
         is_passed = self.rank_filter.verify_and_filter(
             ranked_pool, bm25_scores, v_scores, len(self.documents), self.index.ntotal
         )
-        
-        if not is_passed:
-            return []
 
-        logger.info(f"하이브리드 파이프라인 추론 성공 마감. 결과 상위 {min(top_n, len(ranked_pool))}건 반환")
-        
-        final_out = []
-        for item in ranked_pool[:top_n]:
-            item["score"] = item["score_final"]
-            final_out.append(item)
-        return final_out
+        return ranked_pool[:top_n] if is_passed else []
+
+
+    def _calculate_decay(self, created_at_str: str) -> float:
+        try:
+            dt = datetime.strptime(created_at_str, "%Y-%m-%d %H:%M:%S")
+            delta_days = (datetime.now() - dt).days
+            return float(np.exp(-self.decay_lambda * max(0, delta_days)))
+        except:
+            return 1.0
