@@ -6,6 +6,7 @@ from celery import Celery, Task
 
 from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH, IKG_MODEL_PATH, IKG_MODEL_FILE
 from ai_core.core.embedder import BGEEmbedder
+from ai_core.core.indexer import VectorIndexer
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 app = Celery("ikg_tasks", broker=REDIS_URL, backend=REDIS_URL)
@@ -38,45 +39,43 @@ class EmbeddingInferenceTask(Task):
 
 
 class EmbeddedInferenceWorker:
-    """대안 B(EMBEDDED) 내장 단일 스레드 전용 무오버헤드 인퍼런스 워커 자산"""
+    """단일 프로세스 환경 하에서 CQRS 쓰기 독점을 수행하며 FAISS IDMap 영속을 제어하는 백그라운드 액터"""
     def __init__(self):
-        self._db_path = IKG_DB_PATH
-        self._index_path = IKG_INDEX_PATH
-        print("[EMBEDDED WORKER] 중앙 설정 상수 기반 자원 동기화 마감 완료.")
+        self._db_path = "db/ikg_metadata.db"
+        self._index_path = "db/ikg_vector.index"
+        
+        # 중량급 모델 싱글톤 초기화 웜업
+        print("[EMBEDDED WORKER INIT] ONNX 임베딩 모델 로드 중...")
         self.embedder = BGEEmbedder(
-            model_path=IKG_MODEL_PATH,
-            file_name=IKG_MODEL_FILE
+            model_path="./model/bge-m3-onnx-int8", file_name="model_quantized.onnx"
+        )
+        # [신규 바인딩] 쓰기 전담 커맨드 모듈 초기화
+        self.indexer_engine = VectorIndexer(
+            db_path=self._db_path, index_path=self._index_path, dimension=1024
         )
 
-    def execute_inference_pipeline(self, bookmark_id):
+    def execute_inference_pipeline(self, bookmark_id: int):
         conn = sqlite3.connect(self._db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
         try:
-            cursor.execute("SELECT title, content FROM bookmarks WHERE id = ?", (bookmark_id,))
+            # 활성화 상태인 데이터 타겟 문자열 가공 수집
+            cursor.execute("SELECT title, content FROM bookmarks WHERE id = ? AND is_deleted = 0", (bookmark_id,))
             row = cursor.fetchone()
-            
             if not row:
-                print(f"[EMBEDDED WORKER WARN] ID #{bookmark_id} 문서가 영속 데이터베이스에 실존하지 않습니다.")
-                return {"status": "FAILED", "error": "Row missing"}
+                return {"status": "SKIPPED", "reason": "Active metadata matching row missing"}
             
             combined_text = f"{row['title']} {row['content']}"
             
-            # 고성능 Dense ONNX Quantized 임베딩 추출 추론 가동
-            query_vec = self.embedder.encode(combined_text)
-            vector_np = query_vec[0].astype("float32")
+            # [책임 격리] 분리 완료된 독립 커맨드 엔진에 추론 파이프라인 및 가비지 소거 임무 완전 대리 위임
+            self.indexer_engine.add_document_vector(
+                bookmark_id=bookmark_id, text_content=combined_text, embedder=self.embedder
+            )
             
-            # FAISS 바이너리 파일 안전 결합 및 즉각 플러시
-            index = faiss.read_index(self._index_path)
-            index.add(np.expand_dims(vector_np, axis=0))
-            faiss.write_index(index, self._index_path)
-            
-            print(f"[EMBEDDED WORKER SUCCESS] 문서 ID #{bookmark_id} 인덱싱 최종 완결 (누적 벡터: {index.ntotal}개)")
-            return {"status": "SUCCESS", "bookmark_id": bookmark_id, "current_total": index.ntotal}
-            
+            return {"status": "SUCCESS", "bookmark_id": bookmark_id}
         except Exception as e:
-            print(f"❌ [EMBEDDED WORKER CRITICAL CRASH] 추론 파이프라인 예외 파괴: {e}")
+            print(f"[WORKER PIPELINE CRITICAL ERROR] 백그라운드 색인 실패: {e}")
             return {"status": "FAILED", "error": str(e)}
         finally:
             conn.close()
