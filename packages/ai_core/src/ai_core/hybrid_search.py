@@ -20,6 +20,7 @@ from ai_core.search_layers import (
 
 
 
+# 모듈 단위 네임스페이스 로거 바인딩
 logger = logging.getLogger("ai_core.hybrid_search")
 
 
