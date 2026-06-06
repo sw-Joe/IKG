@@ -13,6 +13,16 @@ export function drawNodeElement(node: any, ctx: CanvasRenderingContext2D, global
   if (node.group === 'domain_anchor') {
     radius = 9;
     fillColor = '#10b981'; // 옵시디언 에메랄드 그린 톤
+
+    // 숨겨진 노드 수 배지 정보 시각화 규칙
+    if (node.hiddenCount > 0) {
+      const badgeText = `+${node.hiddenCount}`;
+      const badgeFontSize = 10 / globalScale;
+      ctx.font = `700 ${badgeFontSize}px sans-serif`;
+      ctx.fillStyle = '#f43f5e'; // 로즈 핑크 또는 경고 톤 색상으로 가시성 확보
+      ctx.textAlign = 'left';
+      ctx.fillText(badgeText, node.x + radius + 3, node.y - 2);
+    }
   } else if (node.group === 'folder') {
     radius = 7;
     fillColor = '#60a5fa';
