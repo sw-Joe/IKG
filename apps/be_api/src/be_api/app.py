@@ -55,6 +55,37 @@ def _embedded_queue_consumer_loop():
 threading.Thread(target=_embedded_queue_consumer_loop, daemon=True).start()
 
 
+@app.post("/api/system/sync", status_code=status.HTTP_200_OK, summary="스토리지-인덱스 전역 정합성 수동/자동 동기화 커널")
+def trigger_infrastructure_integrity_sync():
+    """
+    RDBMS 원천 데이터 구조와 FAISS 인덱스 가상 공간을 상호 대조하여
+    누락 항목은 Catch-up 인덱싱을 수행하고, 삭제 항목은 물리 소거하여 강제 동기화 수렴합니다.
+    """
+    logger.info("[API SYSTEM] 시스템 전역 인프라 스냅샷 강제 동기화 오퍼레이션 명령 수신")
+    try:
+        # 1. CQRS 분리 규칙에 의거, 쓰기 전담 인덱서 엔진의 동기화 코어 가동
+        # worker_actor 내부에 기 빌드된 embedder 및 indexer_engine 자산 재사용 활용
+        sync_summary = worker_actor.indexer_engine.sync_index_with_database(
+            embedder=worker_actor.embedder
+        )
+        
+        # 2. 변경 데이터가 실재할 경우 Read 전용 엔진(HybridSearcher)의 인메모리 스냅샷 컨텍스트 동시 갱신
+        if sync_summary["status"] == "SYNCHRONIZED":
+            logger.info("[API SYSTEM] 물리 변동성 확인에 따른 조회 엔진 인메모리 렉시컬 캐시 무효화 및 리프레시 트리거")
+            searcher_engine.refresh_context()
+            
+        return {
+            "status": "SUCCESS",
+            "metadata": sync_summary
+        }
+    except Exception as e:
+        logger.critical(f"[API SYSTEM CRITICAL] 전역 동기화 실패: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"인프라 동기화 복구 파이프라인 연산 실패: {str(e)}"
+        )
+
+
 # =========================================================================
 # [CREATE] 신규 기술 자산 비동기 격리 인입
 # =========================================================================
