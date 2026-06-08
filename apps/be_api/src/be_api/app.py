@@ -88,33 +88,38 @@ def create_bookmark_endpoint(payload: BookmarkCreateRequest, background_tasks: B
 
 
 # =========================================================================
-# [UPDATE] 기술 자산 정보 수정 및 비동기 벡터 영속 재지정
+# [UPDATE - 신규 추가]: 기술 자산 정보 수정 및 비동기 벡터 영속 재지정
 # =========================================================================
-@app.put("/api/bookmarks/{bookmark_id}", status_code=status.HTTP_202_ACCEPTED, response_model=TaskReceiptResponse)
+@app.put(
+    "/api/bookmarks/{bookmark_id}", 
+    status_code=status.HTTP_202_ACCEPTED, 
+    response_model=TaskReceiptResponse,
+    summary="단일 북마크 메타 정정 및 백그라운드 임베딩 Upsert 위임"
+)
 def update_bookmark_endpoint(bookmark_id: int, payload: BookmarkCreateRequest, background_tasks: BackgroundTasks):
-    """[FIXED]: 구조적으로 누락되었던 실시간 단건 수정 파이프라인 인터페이스 전격 체결"""
     logger.info(f"[API PUT] 데이터 정정 트랜잭션 수신 -> 대상 ID: #{bookmark_id}")
     
     conn = sqlite3.connect(IKG_DB_PATH, timeout=30.0)
     cursor = conn.cursor()
     try:
+        # 수정 타깃이 실존하며 활성 상태(is_deleted=0)인지 선제 검증
         cursor.execute("SELECT id FROM bookmarks WHERE id = ? AND is_deleted = 0", (bookmark_id,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="수정하려는 대상 기술 자산이 존재하지 않거나 활성 상태가 아닙니다.")
             
-        # 1단계: SQLite 원문 메타데이터 정정 집행
+        # 1단계: 단일 진실 공급원(SQLite) 원문 메타데이터 동기 정정 집행
         cursor.execute(
             "UPDATE bookmarks SET url = ?, title = ?, content = ? WHERE id = ? AND is_deleted = 0",
             (str(payload.url), payload.title, payload.content, bookmark_id)
         )
         conn.commit()
         
-        # 2단계: 중복 누적 방지(remove_ids) 및 재임베딩 유도를 위해 가상 내장 워커 큐에 식별자 위임
+        # 2단계: remove_ids -> add_with_ids 추론 체인을 트리거하기 위해 내장 워커 직렬 큐에 식별자 이관
         background_tasks.add_task(embedded_task_queue.put, bookmark_id)
-        logger.info(f"[API PUT SUCCESS] 메타데이터 수정 커밋 완료 -> 워커 큐 이관 완료 ID: #{bookmark_id}")
+        logger.info(f"[API PUT SUCCESS] 메타데이터 정정 완료 -> 워커 큐 이관 완료 ID: #{bookmark_id}")
         
         return TaskReceiptResponse(
-            message="북마크 메타데이터 수정이 완료되었습니다. 벡터 공간 갱신이 백그라운드에서 가동됩니다.",
+            message="북마크 메타데이터 수정이 완료되었습니다. 벡터 공간 재색인이 백그라운드에서 가동됩니다.",
             bookmark_id=bookmark_id,
             task_id=f"task-up-050-{bookmark_id}"
         )
@@ -186,10 +191,11 @@ def get_similarity_graph_topology(threshold: float = 0.85):
         nodes = [{"id": str(doc["id"]), "title": doc["title"], "url": doc["url"]} for doc in documents]
         edges = []
         
-        # [CRITICAL BUG FIX]: IndexIDMap 체제에 맞춰 순차 루프 인덱스 i가 아닌 실제 도큐먼트의 고유 정수 PK를 넘겨 공간 복원하도록 정정
+        # [CRITICAL BUG FIXED]: IndexIDMap 체제에 매칭되도록 루프 인덱스 i가 아닌 
+        # 도큐먼트 내부의 실제 정수형 PK(doc["id"])를 명시적으로 전달하여 기하 벡터 공간을 정상 복원합니다.
         vectors = np.array([faiss_index.reconstruct(int(doc["id"])) for doc in documents]).astype("float32")
         
-        # 정규화 및 상호 코사인 유사도 연산 매트릭스 도출
+        # 상호 코사인 유사도 연산 매트릭스 도출
         norms = np.linalg.norm(vectors, axis=1, keepdims=True) + 1e-9
         normalized_vectors = vectors / norms
         similarity_matrix = np.dot(normalized_vectors, normalized_vectors.T)
@@ -206,7 +212,7 @@ def get_similarity_graph_topology(threshold: float = 0.85):
                     
         return {"nodes": nodes, "edges": edges}
     except Exception as e:
-        logger.error(f"[API GRAPH CRASH] 토폴로지 분석 행렬 붕괴: {str(e)}", exc_info=True)
+        logger.error(f"[API GRAPH CRASH] 토폴로지 분석 행렬 붕괴 원인: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="기하학적 공간 토폴로지 매트릭스 분석 연산 실패")
 
 
