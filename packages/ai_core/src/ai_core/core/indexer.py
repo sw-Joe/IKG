@@ -26,7 +26,7 @@ class VectorIndexer:
         if not os.path.exists(self.index_path):
             os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
             sub_index = faiss.IndexFlatIP(self.dimension)
-            id_map_index = faiss.IndexIDMap(sub_index)
+            id_map_index = faiss.IndexIDMap2(sub_index)
             faiss.write_index(id_map_index, self.index_path)
 
 

@@ -18,9 +18,8 @@ from ai_core import HybridSearcher
 from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH
 
 
-
 # =========================================================================
-# [BOOTSTRAP] 인프라 자동 프로비저닝 레이어 (앱 최초 구동 결함 방어선)
+# [BOOTSTRAP] 인프라 자동 프로비저닝 레이어 (최상단 이동 - 앱 최초 구동 결함 방어)
 # =========================================================================
 def bootstrap_infrastructure():
     """외부 명령 의존성 없이, 최초 가동 시 저장소 디렉토리와 필수 파일 스키마를 원자적 자동 생성"""
@@ -49,13 +48,14 @@ def bootstrap_infrastructure():
 
     # 3. FAISS IndexIDMap 규격 물리 파일 부재 시 즉시 초기화 플러시 (Read 계층 크래시 완전 방어)
     if not os.path.exists(IKG_INDEX_PATH):
-        # BGE-M3 Dense 임베딩 차원(1024) 규격에 맞춘 빈 IndexIDMap 바이너리 선제 빌드
+        # BGE-M3 Dense 임베딩 차원(1024) 규격에 맞춘 빈 IndexIDMap2 바이너리 선제 빌드
         sub_index = faiss.IndexFlatIP(1024)
-        id_map_index = faiss.IndexIDMap(sub_index)
+        id_map_index = faiss.IndexIDMap2(sub_index)
         faiss.write_index(id_map_index, IKG_INDEX_PATH)
 
-# 싱글톤 컴포넌트 평가 전 인프라 부트스트래핑 선제 강제 집행
+# 싱글톤 컴포넌트 평가 전 인프라 부트스트래핑 선제 강제 집행 (최우선 순위 격상)
 bootstrap_infrastructure()
+
 
 # =========================================================================
 # [INITIALIZATION] 전역 서비스 및 로깅 파이프라인 수립
@@ -74,7 +74,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 4. CQRS Read 전용 하이브리드 검색 싱글톤 엔진 로드 (부트스트랩 덕분에 안전하게 로드됨)
+# 4. CQRS Read 전용 하이브리드 검색 싱글톤 엔진 로드 (인프라가 완비된 후 안전하게 바인딩)
 searcher_engine = HybridSearcher()
 
 # 5. 내장형 비동기 직렬화 태스크 큐 버퍼 및 워커 런타임 결합
