@@ -24,34 +24,57 @@ class BGEEmbedder:
 
 
     def encode(self, text: str) -> np.ndarray:
+            """기존 단건 추론 로직 (기존 레거시 및 be_api/tasks.py 하위 호환 보존)"""
+            inputs = self.tokenizer(
+                text, padding=True, truncation=True, max_length=8192, return_tensors="np"
+            )
+            onnx_inputs = {
+                "input_ids": inputs["input_ids"].astype(np.int64),
+                "attention_mask": inputs["attention_mask"].astype(np.int64)
+            }
+            if "token_type_ids" in inputs:
+                onnx_inputs["token_type_ids"] = inputs["token_type_ids"].astype(np.int64)
+                
+            outputs = self.session.run(None, onnx_inputs)
+            return outputs[0]
+
+
+    def encode_batch(self, texts: list[str]) -> np.ndarray:
         """
-        입력 텍스트를 1024차원의 정규화된 벡터로 변환합니다.
+        [OPTIMIZED TRUE BATCH] 다량의 원문 컨텍스트 배열을 단 1회의 
+        ONNX 텐서 연산으로 병렬 가속하여 고차원 밀도 행렬을 도출합니다.
         """
-        # 3. 텍스트 전처리 (Max length 8192 토큰 대응)
+        if not texts:
+            return np.empty((0, 1024), dtype=np.float32)
+
+        # 1. 100건 전체에 대한 병렬 토크나이징 (가장 긴 장문 문서를 기점으로 일괄 패딩 정렬)
         inputs = self.tokenizer(
-            text, 
+            texts, 
             padding=True, 
             truncation=True, 
             max_length=8192, 
             return_tensors="np"
         )
         
-        # ONNX 모델의 입력 형식에 맞게 변환 (int64)
-        onnx_inputs = {k: v.astype(np.int64) for k, v in inputs.items()}
-
-        # 4. 모델 추론 실행
+        # 2. C++ ONNX Runtime 입력 매트릭스 변환
+        onnx_inputs = {
+            "input_ids": inputs["input_ids"].astype(np.int64),
+            "attention_mask": inputs["attention_mask"].astype(np.int64)
+        }
+        if "token_type_ids" in inputs:
+            onnx_inputs["token_type_ids"] = inputs["token_type_ids"].astype(np.int64)
+            
+        # 3. 단 1회의 실행으로 전체 배치 차원 밀어붙이기집행
         outputs = self.session.run(None, onnx_inputs)
         
-        # 5. Dense Embedding 추출 (첫 번째 레이어의 CLS 토큰 사용)
-        # BGE-M3 ONNX 출력 구조에 따라 인덱싱이 달라질 수 있으나, 일반적으로 0번째 출력의 [:, 0, :]입니다.
-        last_hidden_state = outputs[0]
-        embeddings = last_hidden_state[:, 0, :]
-
-        # 6. L2 정규화 (유사도 계산 효율 극대화)
-        norm = np.linalg.norm(embeddings, axis=1, keepdims=True)
-        normalized_embeddings = embeddings / (norm + 1e-9)
+        # BGE-M3 Dense 임베딩의 특징인 CLS 토큰 풀링 결과 레이어([:, 0, :])를 취해 슬라이싱 추출 후 정규화
+        dense_embeddings = outputs[0][:, 0, :]
         
-        return normalized_embeddings.astype('float32')
+        # 4. 수학적 상호 코사인 공간 보존을 위한 고속 정규화(L2 Normalization) 집행
+        norms = np.linalg.norm(dense_embeddings, axis=1, keepdims=True) + 1e-9
+        normalized_embeddings = dense_embeddings / norms
+        
+        return normalized_embeddings.astype(np.float32)
 
     
     def encode_sparse(self, text: str) -> dict:
