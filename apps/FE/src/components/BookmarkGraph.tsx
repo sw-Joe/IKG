@@ -21,8 +21,9 @@ export const BookmarkGraph: React.FC<BookmarkGraphProps> = memo(({ highlightNode
   useEffect(() => {
     bookmarkService.getGraphTopology()
       .then((data) => {
+        // [FIXED]: BE 명세의 'edges' 키를 안전하게 가로채어 FE 상태 계층인 'backendRawEdges'에 주입 수렴
         setBackendRawNodes(data.nodes);
-        setBackendRawEdges(data.edges);
+        setBackendRawEdges(data.edges || []); 
         setLoading(false);
       })
       .catch((err) => {
