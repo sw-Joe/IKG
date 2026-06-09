@@ -22,6 +22,9 @@ def initialize_database_schema(db_path: str) -> bool:
         conn = sqlite3.connect(db_path, timeout=30.0)
         cursor = conn.cursor()
         
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
+
         # 3. 메타데이터 최종 진실 공급원 bookmarks 테이블 영속 선언
         # (is_deleted: 0=활성, 1=논리소거, 2=검증보류 격리자산)
         cursor.execute("""
@@ -32,6 +35,17 @@ def initialize_database_schema(db_path: str) -> bool:
                 content TEXT,
                 created_at TEXT,
                 is_deleted INTEGER DEFAULT 0
+            );
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bookmarks_isolated (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT UNIQUE,
+                title TEXT,
+                content TEXT,
+                created_at TEXT,
+                isolation_reason TEXT            -- 격리(보류) 처리 사유 명시
             );
         """)
         

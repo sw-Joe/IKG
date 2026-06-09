@@ -3,7 +3,6 @@ from typing import Optional
 from datetime import datetime
 
 
-
 class BookmarkCreateRequest(BaseModel):
     """신규 등록 및 수정을 위한 데이터 검증 및 유효성 바인딩 Pydantic 모델"""
     url: HttpUrl = Field(..., description="올바른 형식의 웹페이지 URL (HTTP/HTTPS 필수)")
@@ -25,5 +24,5 @@ class TaskReceiptResponse(BaseModel):
     message: str
     bookmark_id: int
     task_id: str
-    status: str = "accepted"
+    status: str = "accepted"  # "accepted", "isolated", "success" 상태 분기 유연화 대응
     timestamp: datetime = Field(default_factory=datetime.now)
