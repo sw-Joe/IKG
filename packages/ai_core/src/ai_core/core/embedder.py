@@ -75,6 +75,32 @@ class BGEEmbedder:
         normalized_embeddings = dense_embeddings / norms
         
         return normalized_embeddings.astype(np.float32)
+    
+
+    def encode_single(self, text: str) -> np.ndarray:
+        """
+        [ADD ON] 단건 하이브리드 질의어 전용 고속 ONNX 인퍼런스 파이프라인
+        - 1차원 문자열을 받아 FAISS 텐서 공간 적재 규격인 [1, 1024] 형상의 FP32 배열을 반환합니다.
+        """
+        if not text or not text.strip():
+            return np.zeros((1, 1024), dtype=np.float32)
+            
+        # 기존 구현된 encode() 자산을 재활용하여 배치 컨텍스트 가동
+        # 리스트로 감싸서 [1, Dimension] 형태로 추론을 유도합니다.
+        batch_results = self.encode([text])
+        
+        if batch_results is not None and len(batch_results) > 0:
+            # batch_results is of shape (1, L, 1024). Extract CLS token at index 0.
+            vec = np.array(batch_results[0][0], dtype=np.float32)
+            if vec.ndim == 1:
+                vec = np.expand_dims(vec, axis=0)
+            
+            # 수학적 정규화 처리 (cosine similarity 대비)
+            norm = np.linalg.norm(vec, axis=1, keepdims=True) + 1e-9
+            vec = vec / norm
+            return vec
+            
+        return np.zeros((1, 1024), dtype=np.float32)
 
     
     def encode_sparse(self, text: str) -> dict:

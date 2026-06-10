@@ -1,5 +1,6 @@
 from .candidate_pool import CandidatePoolExtractor
 from .context_attention import ContextAttentionRouter
-from .rank_filter import RankPenaltyFilter
+from .rank_filter import AdvancedRankFilter
 
-__all__ = ["CandidatePoolExtractor", "ContextAttentionRouter", "RankPenaltyFilter"]
+
+__all__ = ["CandidatePoolExtractor", "ContextAttentionRouter", "AdvancedRankFilter"]

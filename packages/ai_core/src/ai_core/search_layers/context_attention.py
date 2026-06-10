@@ -16,8 +16,8 @@ class ContextAttentionRouter:
         [FIXED]: 글로벌 컨텍스트 센터 계산 시 IndexIDMap 정합성을 사수하기 위해 
         실제 영속 ID 기반 reconstruct 연산 체인으로 전격 고도화했습니다.
         """
-        query_vector_32 = query_vector.astype("float32")
-        total_vectors = index.ntotal
+        query_vector_32 = query_vector.astype("float32").flatten()
+        total_vectors = len(documents_list)
         
         if total_vectors == 0 or not documents_list:
             return 0.5, 0.5
