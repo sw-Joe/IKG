@@ -7,6 +7,7 @@ from rank_bm25 import BM25Okapi
 
 from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH, IKG_MODEL_PATH, IKG_MODEL_FILE
 from ai_core.core.embedder import BGEEmbedder
+from ai_core.core.db_initializer import initialize_database_schema
 from ai_core.search_layers.candidate_pool import CandidatePoolExtractor
 from ai_core.search_layers.context_attention import ContextAttentionRouter
 from ai_core.search_layers.rank_filter import AdvancedRankFilter
@@ -30,6 +31,8 @@ class HybridSearcher:
 
     def refresh_context(self):
         """SQLite 실존 정상 레코드 스냅샷 인메모리 동기화 미러링"""
+        initialize_database_schema(IKG_DB_PATH)
+        
         conn = sqlite3.connect(IKG_DB_PATH)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()

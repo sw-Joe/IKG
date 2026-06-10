@@ -34,7 +34,8 @@ def initialize_database_schema(db_path: str) -> bool:
                 title TEXT,
                 content TEXT,
                 created_at TEXT,
-                is_deleted INTEGER DEFAULT 0
+                is_deleted INTEGER DEFAULT 0,
+                index_written INTEGER DEFAULT 0
             );
         """)
 
