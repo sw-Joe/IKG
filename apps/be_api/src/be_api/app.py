@@ -269,7 +269,8 @@ def trigger_infrastructure_integrity_sync():
         sync_summary = worker_actor.indexer_engine.sync_index_with_database(
             embedder=worker_actor.embedder
         )
-        if sync_summary["status"] == "SYNCHRONIZED":
+        if sync_summary["status"] in ["SYNCHRONIZED", "NO_CHANGE"]:
+            logger.info("[API SYSTEM] 디스크 자산 정합성이 확인되었습니다. 메모리 컨텍스트를 동기화합니다.")
             searcher_engine.refresh_context()
         return {"status": "SUCCESS", "metadata": sync_summary}
     except Exception as e:
