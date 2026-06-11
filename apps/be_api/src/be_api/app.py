@@ -22,7 +22,7 @@ from be_api.tasks import EmbeddedInferenceWorker
 setup_logging()
 logger = logging.getLogger("be_api.app")
 
-app = FastAPI(title="IKG Intelligent Hybrid Search Gateway", version="0.6.0")
+app = FastAPI(title="IKG Hybrid Search Gateway", version="0.6.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,8 +59,75 @@ consumer_thread = threading.Thread(target=_embedded_queue_consumer_loop, daemon=
 consumer_thread.start()
 
 
+@app.get("/api/graph")
+def get_knowledge_graph_matrix_endpoint(threshold: float = 0.85):
+    conn = sqlite3.connect(IKG_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, title, url FROM bookmarks WHERE is_deleted = 0")
+        rows = cursor.fetchall()
+        documents = [{"id": r["id"], "title": r["title"], "url": r["url"]} for r in rows]
+
+        total_docs = len(documents)
+        nodes = [{"id": str(doc["id"]), "label": doc["title"], "url": doc["url"]} for doc in documents]
+        edges = []
+
+        faiss_index = faiss.read_index(IKG_INDEX_PATH)
+
+        valid_docs = []
+        valid_vectors = []
+        for doc in documents:
+            try:
+                vec = faiss_index.reconstruct(doc["id"])
+                valid_docs.append(doc)
+                valid_vectors.append(vec)
+            except Exception:
+                continue
+
+        if valid_vectors:
+            vec_matrix = np.array(valid_vectors)
+            norms = np.linalg.norm(vec_matrix, axis=1, keepdims=True) + 1e-9
+            normalized_matrix = vec_matrix / norms
+            sim_matrix = np.dot(normalized_matrix, normalized_matrix.T)
+
+            for i in range(len(valid_docs)):
+                for j in range(i + 1, len(valid_docs)):
+                    sim_score = float(sim_matrix[i, j])
+                    if sim_score >= threshold:
+                        edges.append({
+                            "source": str(valid_docs[i]["id"]),
+                            "target": str(valid_docs[j]["id"]),
+                            "value": round(sim_score, 4)
+                        })
+
+        return {"nodes": nodes, "links": edges}
+    except Exception as e:
+        logger.error(f"[API GRAPH CRASH] 토폴로지 분석 장애: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="토폴로지 매트릭스 연산 실패")
+    finally:
+        conn.close()
+
+
+@app.post("/api/system/sync", status_code=status.HTTP_200_OK)
+def trigger_infrastructure_integrity_sync():
+    """SQLite 파일 - FAISS 인덱스 파일 동기화"""
+    try:
+        sync_summary = worker_actor.indexer_engine.sync_index_with_database(
+            embedder=worker_actor.embedder
+        )
+        if sync_summary["status"] in ["SYNCHRONIZED", "NO_CHANGE"]:
+            logger.info("[API SYSTEM] 디스크 자산 정합성이 확인되었습니다. 메모리 컨텍스트를 동기화합니다.")
+            searcher_engine.refresh_context()
+        return {"status": "SUCCESS", "metadata": sync_summary}
+    except Exception as e:
+        logger.critical(f"시스템 동기화 붕괴: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/bookmarks", response_model=TaskReceiptResponse, status_code=status.HTTP_201_CREATED)
 def create_bookmark_endpoint(payload: BookmarkCreateRequest, background_tasks: BackgroundTasks):
+    """북마크 인입(추가) 요청"""
     target_url = str(payload.url)
     logger.info(f"[API POST] 단건 북마크 실시간 인입 수신 -> 수집 프로세스 기동: {target_url}")
     
@@ -127,17 +194,50 @@ def create_bookmark_endpoint(payload: BookmarkCreateRequest, background_tasks: B
         conn.close()
 
 
-@app.put("/api/bookmarks/recover/{isolated_id}", status_code=status.HTTP_202_ACCEPTED)
-def recover_isolated_bookmark_endpoint(isolated_id: int, payload: BookmarkCreateRequest):
+# [CRUD: UPDATE] 자산 수정 라우터 추가
+@app.put("/api/bookmarks/{bookmark_id}", status_code=status.HTTP_200_OK)
+def update_bookmark_endpoint(bookmark_id: int, payload: BookmarkCreateRequest):
+    """북마크 수정 요청"""
+    logger.info(f"[API PUT] 자산 수정 요청 수신 -> ID: #{bookmark_id}")
+
     conn = sqlite3.connect(IKG_DB_PATH, timeout=30.0)
     cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM bookmarks WHERE id = ?", (bookmark_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="수정할 대상 자산이 존재하지 않습니다.")
+
+        cursor.execute(
+            "UPDATE bookmarks SET title = ?, content = ?, url = ? WHERE id = ?",
+            (payload.title, payload.content, str(payload.url), bookmark_id)
+        )
+        conn.commit()
+
+        # 벡터 인덱스 갱신을 위해 삭제 후 재등록 프로세스 트리거 (비동기 처리)
+        embedded_task_queue.put({"action": "DELETE", "id": bookmark_id})
+        embedded_task_queue.put({"action": "ADD", "id": bookmark_id})
+
+        return {"status": "SUCCESS", "updated_id": bookmark_id}
+    finally:
+        conn.close()
+
+
+@app.put("/api/bookmarks/recover/{isolated_id}", status_code=status.HTTP_202_ACCEPTED)
+def recover_isolated_bookmark_endpoint(isolated_id: int, payload: BookmarkCreateRequest):
+    """격리 테이블로 격리된 비정상 북마크의 테이블 정정 복구"""
+    logger.info(f"[API PUT] 정정 복구 트랜잭션 개시 -> 대상 isolated_id: #{isolated_id}")
+    
+    conn = sqlite3.connect(IKG_DB_PATH, timeout=30.0)
+    cursor = conn.cursor()
+
     try:
         cursor.execute("SELECT url, created_at FROM bookmarks_isolated WHERE id = ?", (isolated_id,))
         row = cursor.fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="격리 자산 식별자가 부재합니다.")
-        
+            logger.warning(f"[API PUT WARNING] 격리 자산 식별자 탐색 실패 -> ID: #{isolated_id}")
+            raise HTTPException(status_code=404, detail="지정된 격리 자산 식별자가 부재합니다.")
         original_url, original_created_at = row
+
         cursor.execute("BEGIN TRANSACTION;")
         try:
             cursor.execute(
@@ -148,23 +248,55 @@ def recover_isolated_bookmark_endpoint(isolated_id: int, payload: BookmarkCreate
                 (original_url, payload.title, payload.content, original_created_at)
             )
             new_main_id = cursor.lastrowid
+
             cursor.execute("DELETE FROM bookmarks_isolated WHERE id = ?", (isolated_id,))
             conn.commit()
-        except sqlite3.IntegrityError:
+            logger.info(f" -> [DB MIGRATION SUCCESS] 격리ID #{isolated_id} ──► 메인 최하단 ID #{new_main_id} 이관 수렴")
+        except sqlite3.IntegrityError as ie:
             conn.rollback()
-            raise HTTPException(status_code=400, detail="이미 메인 테이블에 존재하는 URL입니다.")
+            logger.error(f"[API PUT INTEGRITY ERROR] URL 중복 제약 충돌 발생: {ie}")
+            raise HTTPException(status_code=400, detail="정정 복구하려는 URL 자산이 이미 메인 자산 테이블에 존재합니다.")
         except Exception as e:
             conn.rollback()
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"[API PUT CRITICAL] 원자적 트랜잭션 내부 붕괴: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"데이터베이스 원자적 트랜잭션 통합 붕괴: {str(e)}")
 
+        # 비동기 직렬화 인퍼런스 버스 인큐잉
         embedded_task_queue.put({"action": "ADD", "id": new_main_id})
-        return {"status": "SUCCESS", "source_isolated_id": isolated_id, "assigned_main_id": new_main_id}
+
+        # ---------------------------------------------------------------------
+        # 💡 [DEBUG LOGGING INJECT]: 최종 출력 직전 고해상도 가시성 로깅 가드 구축
+        # ---------------------------------------------------------------------
+        updated_node_snapshot = {
+            "id": new_main_id,
+            "title": payload.title,
+            "url": original_url,
+            "score": 1.0
+        }
+        
+        # 1차원 리스트 형태를 상정한 포맷 빌드
+        final_payload_array = [updated_node_snapshot]
+        
+        # 로그 출력 세션 개시
+        logger.info("====================================================================")
+        logger.info("[DEBUG-MONITOR] PUT 엔드포인트 반환 직전 원시 데이터 정밀 계측")
+        logger.info(f" -> 최종 페이로드 타입(Type): {type(final_payload_array)}")
+        logger.info(f" -> 최종 페이로드 데이터(Raw): {final_payload_array}")
+        
+        # 만약 특수 확장 구조를 사용 중이라면 딕셔너리 속성(Dict Keys)까지 투명하게 출력
+        if hasattr(final_payload_array, "__dict__"):
+            logger.info(f" -> 숨겨진 객체 프로퍼티 속성 축(Keys): {final_payload_array.__dict__.keys()}")
+        logger.info("====================================================================")
+
+        return final_payload_array
+        
     finally:
         conn.close()
 
 
 @app.delete("/api/bookmarks/{bookmark_id}", status_code=status.HTTP_200_OK)
 def delete_bookmark_endpoint(bookmark_id: int):
+    """북마크 삭제"""
     conn = sqlite3.connect(IKG_DB_PATH, timeout=30.0)
     cursor = conn.cursor()
     try:
@@ -182,6 +314,7 @@ def delete_bookmark_endpoint(bookmark_id: int):
 
 @app.get("/api/search")
 def search_bookmarks_endpoint(q: str | None = None, query: str | None = None, limit: int = 5):
+    """북마크 검색"""
     effective_query = q or query
     logger.info(f"[API GET SEARCH] 하이브리드 지식 검색 세션 진입 -> 질의어: '{effective_query}'")
     
@@ -211,70 +344,6 @@ def search_bookmarks_endpoint(q: str | None = None, query: str | None = None, li
     except Exception as e:
         logger.error(f"[API SEARCH ERROR] 하이브리드 검색 컨텍스트 연산 장애: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="시맨틱 하이브리드 공간 검색 정렬 붕괴")
-
-
-@app.get("/api/graph")
-def get_knowledge_graph_matrix_endpoint(threshold: float = 0.85):
-    conn = sqlite3.connect(IKG_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT id, title, url FROM bookmarks WHERE is_deleted = 0")
-        rows = cursor.fetchall()
-        documents = [{"id": r["id"], "title": r["title"], "url": r["url"]} for r in rows]
-
-        total_docs = len(documents)
-        nodes = [{"id": str(doc["id"]), "label": doc["title"], "url": doc["url"]} for doc in documents]
-        edges = []
-
-        faiss_index = faiss.read_index(IKG_INDEX_PATH)
-
-        valid_docs = []
-        valid_vectors = []
-        for doc in documents:
-            try:
-                vec = faiss_index.reconstruct(doc["id"])
-                valid_docs.append(doc)
-                valid_vectors.append(vec)
-            except Exception:
-                continue
-
-        if valid_vectors:
-            vec_matrix = np.array(valid_vectors)
-            norms = np.linalg.norm(vec_matrix, axis=1, keepdims=True) + 1e-9
-            normalized_matrix = vec_matrix / norms
-            sim_matrix = np.dot(normalized_matrix, normalized_matrix.T)
-
-            for i in range(len(valid_docs)):
-                for j in range(i + 1, len(valid_docs)):
-                    sim_score = float(sim_matrix[i, j])
-                    if sim_score >= threshold:
-                        edges.append({
-                            "source": str(valid_docs[i]["id"]),
-                            "target": str(valid_docs[j]["id"]),
-                            "value": round(sim_score, 4)
-                        })
-
-        return {"nodes": nodes, "links": edges}
-    except Exception as e:
-        logger.error(f"[API GRAPH CRASH] 토폴로지 분석 장애: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="토폴로지 매트릭스 연산 실패")
-    finally:
-        conn.close()
-
-
-@app.post("/api/system/sync", status_code=status.HTTP_200_OK)
-def trigger_infrastructure_integrity_sync():
-    try:
-        sync_summary = worker_actor.indexer_engine.sync_index_with_database(
-            embedder=worker_actor.embedder
-        )
-        if sync_summary["status"] == "SYNCHRONIZED":
-            searcher_engine.refresh_context()
-        return {"status": "SUCCESS", "metadata": sync_summary}
-    except Exception as e:
-        logger.critical(f"시스템 동기화 붕괴: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

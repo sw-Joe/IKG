@@ -21,6 +21,7 @@ class EmbeddedInferenceWorker:
         self.embedder = BGEEmbedder(model_path=IKG_MODEL_PATH, file_name=IKG_MODEL_FILE)
         self.indexer_engine = VectorIndexer(dimension=1024)
 
+
     def execute_sequential_inference_pipeline(self, bookmark_id: int) -> dict:
         """
         [WRITE ATOMIC]: 단건 증분 인덱싱 및 물리 파일 디스크 커밋 영구 기록 파이프라인
@@ -72,6 +73,7 @@ class EmbeddedInferenceWorker:
             return {"status": "FAILED", "error": str(e)}
         finally:
             conn.close()
+
 
     def execute_sequential_removal_pipeline(self, bookmark_id: int) -> dict:
         """[DELETE ATOMIC]: 단건 물리 완전 삭제 발생 시 FAISS 인덱스 공간 하이브리드 동기 소거 프로토콜"""
