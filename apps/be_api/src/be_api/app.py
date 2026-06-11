@@ -64,26 +64,27 @@ def create_bookmark_endpoint(payload: BookmarkCreateRequest, background_tasks: B
     target_url = str(payload.url)
     logger.info(f"[API POST] 단건 북마크 실시간 인입 수신 -> 수집 프로세스 기동: {target_url}")
     
-    # 1. AnyIO 스레드 컨텍스트 내부에서 Playwright 비동기 크롬 커널 안전 인보크
+    # 1. 외부 URL 스크래핑 시도
     scraped_title, scraped_content = asyncio.run(scrape_url_standalone(target_url))
     
-    # 2. 실시간 크롤링 결과에 대한 고밀도 정보 유효성 가드라인 교차 검증 집행
-    is_valid_content, isolation_reason = validate_scraped_bookmark(scraped_title, scraped_content)
-    
-    # 길이가 100자 미만인 하한선 하드웨어 제약도 보완 검증 처리
-    if is_valid_content and len(scraped_content) < 100:
-        is_valid_content = False
-        isolation_reason = "TEXT_LENGTH_INSUFFICIENT_UNDER_100"
-
-    # 최종 저장 뼈대 확정 (실시간 크롤링 완료본이 우선하며, 누락 시 페이로드 백업 승계)
+    # 💡 [FIXED]: 검증을 집행하기 전에, 최종적으로 시스템에 저장될 '데이터의 실체'를 먼저 확정합니다.
+    # 스크래핑 본문이 유실되었거나 방화벽에 막혔다면 요청 페이로드(payload) 자산을 승계합니다.
     final_title = scraped_title or payload.title
     final_content = scraped_content or payload.content
+
+    # 💡 [FIXED]: 스크래핑 원본이 아닌, 최종 확정된 텍스트 인프라를 기준으로 유효성을 교차 검증합니다.
+    is_valid_content, isolation_reason = validate_scraped_bookmark(final_title, final_content)
+    
+    # 길이가 100자 미만인 하한선 보완 검증 처리 (final_content 기준)
+    if is_valid_content and len(final_content) < 100:
+        is_valid_content = False
+        isolation_reason = "TEXT_LENGTH_INSUFFICIENT_UNDER_100"
 
     conn = sqlite3.connect(IKG_DB_PATH, timeout=30.0)
     cursor = conn.cursor()
     try:
         if is_valid_content:
-            # Case A: 실시간 스크래핑 및 지식 가치 검증 완벽 통과 -> 메인 고밀도 테이블 적재
+            # 스크래핑이 실패했더라도 페이로드 본문이 100자 이상이고 WAF 키워드가 없으면 정식 수입 통과
             cursor.execute(
                 """
                 INSERT INTO bookmarks (url, title, content, created_at, is_deleted, index_written)
@@ -94,16 +95,14 @@ def create_bookmark_endpoint(payload: BookmarkCreateRequest, background_tasks: B
             assigned_id = cursor.lastrowid
             conn.commit()
 
-            # 실시간 비동기 임베딩 인덕션 버스 큐 진입 명령 트리거
             embedded_task_queue.put({"action": "ADD", "id": assigned_id})
 
             return TaskReceiptResponse(
-                message="실시간 웹 스크래핑 및 정합성 검증 통과 완료. 백그라운드 벡터 차원 공간 적재 프로세스를 기동합니다.",
+                message="자산 정합성 검증 완료. 백그라운드 벡터 차원 공간 적재 프로세스를 기동합니다.",
                 bookmark_id=assigned_id,
                 task_id=f"TASK-ADD-{assigned_id}"
             )
         else:
-            # Case B: 웹 방화벽 차단, 404, 혹은 본문 훼손 자산 -> 보류 격리 샌드박스 테이블 적재 (FAISS 인큐잉 영구 격리 차단)
             cursor.execute(
                 """
                 INSERT INTO bookmarks_isolated (url, title, content, created_at, isolation_reason)
@@ -115,14 +114,14 @@ def create_bookmark_endpoint(payload: BookmarkCreateRequest, background_tasks: B
             conn.commit()
 
             return TaskReceiptResponse(
-                message=f"[VALIDATION_HOLD] 실시간 수집 결과 정보 가치 미달로 인한 격리 공간 이관 완수. 사유: {isolation_reason}",
+                message=f"[VALIDATION_HOLD] 격리 공간 이관 완수. 사유: {isolation_reason}",
                 bookmark_id=assigned_id,
                 task_id=f"TASK-ISOLATE-{assigned_id}",
                 status="isolated"
             )
 
     except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="이미 시스템 내부 인프라에 상주 중인 유일 고유 URL 명세입니다.")
+        raise HTTPException(status_code=400, detail="이미 시스템 내부 인프라에 상주 중인 고유 URL 명세입니다.")
     finally:
         conn.close()
 
