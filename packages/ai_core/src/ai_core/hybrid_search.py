@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+import threading
 
 import numpy as np
 import faiss
@@ -21,6 +22,7 @@ class HybridSearcher:
     """인메모리 CQRS 고속 하이브리드 검색 오케스트레이션 코어 엔진"""
     def __init__(self):
         logger.info("[HYBRID CORE] 하이브리드 지식 검색 컨텍스트 웜업 가동...")
+        self._context_lock = threading.RLock()
         self.embedder = BGEEmbedder(model_path=IKG_MODEL_PATH, file_name=IKG_MODEL_FILE)
         
         self.layer1_pool = CandidatePoolExtractor()
@@ -40,8 +42,8 @@ class HybridSearcher:
             cursor.execute("SELECT id, title, content, url FROM bookmarks WHERE is_deleted = 0")
             rows = cursor.fetchall()
             
-            self.documents = []
-            self.doc_id_to_idx = {}
+            documents = []
+            doc_id_to_idx = {}
             
             for idx, row in enumerate(rows):
                 doc_dict = {
@@ -50,22 +52,32 @@ class HybridSearcher:
                     "content": row["content"],
                     "url": row["url"]
                 }
-                self.documents.append(doc_dict)
-                self.doc_id_to_idx[row["id"]] = idx
+                documents.append(doc_dict)
+                doc_id_to_idx[row["id"]] = idx
                 
-            total_docs = len(self.documents)
+            total_docs = len(documents)
             logger.info(f" -> [DB RE-INDEX] 인메모리 유효 지식 자산 미러링 완수: {total_docs}건")
             
             if total_docs > 0:
-                tokenized_corpus = [doc["content"].split() for doc in self.documents]
-                self.bm25 = BM25Okapi(tokenized_corpus)
+                tokenized_corpus = [(doc["content"] or "").split() for doc in documents]
+                bm25 = BM25Okapi(tokenized_corpus)
             else:
-                self.bm25 = None
+                bm25 = None
+
+            with self._context_lock:
+                self.documents = documents
+                self.doc_id_to_idx = doc_id_to_idx
+                self.bm25 = bm25
         finally:
             conn.close()
 
     def search(self, query: str, top_n: int = 5, alpha: float = 0.3, stage1_k: int = 40) -> list:
-        if not self.documents or self.bm25 is None:
+        with self._context_lock:
+            documents = list(self.documents)
+            doc_id_to_idx = dict(self.doc_id_to_idx)
+            bm25 = self.bm25
+
+        if not documents or bm25 is None:
             return []
 
         # 1. BGE-M3 ONNX 고속 단건 추론 실행
@@ -76,10 +88,10 @@ class HybridSearcher:
         candidate_ids, bm25_scores, v_scores = self.layer1_pool.extract(
             query=query,
             query_vector=query_vector,
-            bm25_instance=self.bm25,
+            bm25_instance=bm25,
             faiss_index=faiss_index,
-            documents_list=self.documents,
-            doc_id_to_idx_map=self.doc_id_to_idx,
+            documents_list=documents,
+            doc_id_to_idx_map=doc_id_to_idx,
             stage1_k=stage1_k
         )
 
@@ -88,10 +100,10 @@ class HybridSearcher:
 
         ranked_pool = []
         for doc_id in candidate_ids:
-            if doc_id not in self.doc_id_to_idx:
+            if doc_id not in doc_id_to_idx:
                 continue
-            idx = self.doc_id_to_idx[doc_id]
-            doc = self.documents[idx]
+            idx = doc_id_to_idx[doc_id]
+            doc = documents[idx]
 
             # 가중 선형 결합 수식 계산 ($Score = \alpha \cdot Lexical + (1-\alpha) \cdot Semantic$)
             score_final = alpha * bm25_scores[idx] + (1.0 - alpha) * v_scores[idx]

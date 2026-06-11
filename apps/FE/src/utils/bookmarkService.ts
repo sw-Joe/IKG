@@ -4,6 +4,12 @@ export interface BookmarkPayload {
   content: string;
 }
 
+export interface BookmarkIngestPayload {
+  url: string;
+  title?: string;
+  content?: string;
+}
+
 export interface GraphNode {
   id: string;
   title: string;
@@ -20,6 +26,7 @@ export interface GraphEdge {
 export interface GraphTopologyResponse {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  links?: GraphEdge[];
 }
 
 const BE_BASE_URL = "http://127.0.0.1:8000";
@@ -28,13 +35,13 @@ export const bookmarkService = {
   /**
    * 1. [CREATE] 신규 북마크 접수 및 비동기 파이프라인 격리 위임 트리거
    */
-  async createBookmark(payload: BookmarkPayload): Promise<any> {
+  async createBookmark(payload: BookmarkIngestPayload): Promise<any> {
     const response = await fetch(`${BE_BASE_URL}/api/bookmarks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (response.status !== 202) {
+    if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.detail || "자산 선적재 예외 발생.");
     }
@@ -57,12 +64,17 @@ export const bookmarkService = {
   /**
    * 3. [READ] 기하학적 공간 시각화 토폴로지 데이터셋 수신
    */
-  async getGraphTopology(threshold: float = 0.85): Promise<GraphTopologyResponse> {
+  async getGraphTopology(threshold: number = 0.85): Promise<GraphTopologyResponse> {
     const response = await fetch(`${BE_BASE_URL}/api/graph?threshold=${threshold}`);
     if (!response.ok) {
       throw new Error("공간 토폴로지 데이터 바인딩 실패.");
     }
-    return response.json();
+    const data = await response.json();
+    return {
+      nodes: data.nodes || [],
+      edges: data.edges || data.links || [],
+      links: data.links || data.edges || [],
+    };
   },
 
   /**

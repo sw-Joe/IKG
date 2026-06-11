@@ -3,13 +3,12 @@ import { BookmarkGraph } from './components/BookmarkGraph';
 import { SideBar } from './components/SideBar';
 
 function App() {
-  const [highlightIds, setHighlightIds] = useState([]);
-  
-  // [최적화 2단계]: 렌더링 우선순위 조정 (상태 업데이트 지연)
+  const [highlightIds, setHighlightIds] = useState<string[]>([]);
+
   // 검색 결과에 따른 그래프 포커싱 연산을 백그라운드로 지연시켜 사용자 타이핑 응답성을 확보합니다.
   const deferredHighlightIds = useDeferredValue(highlightIds);
 
-  const handleSearchComplete = (matchingIds) => {
+  const handleSearchComplete = (matchingIds: string[]) => {
     console.log("[APP MATRIX LOG] AI 하이브리드 검색 매칭 노드 인입:", matchingIds);
     setHighlightIds(matchingIds);
   };
@@ -33,17 +32,17 @@ function App() {
       </header>
 
       <main className="main-content-split-zone">
-        <SideBar 
-          onSearchComplete={handleSearchComplete} 
-          onSearchClear={handleSearchClear} 
+        <SideBar
+          onSearchComplete={handleSearchComplete}
+          onSearchClear={handleSearchClear}
         />
 
         <section className="graph-canvas-section border-l border-slate-900">
-          {/* 지연된 상태값을 하위 캔버스 컴포넌트에 주입 */}
           <BookmarkGraph highlightNodes={deferredHighlightIds} />
         </section>
       </main>
     </div>
   );
 }
+
 export default App;

@@ -1,11 +1,51 @@
 import logging
 import asyncio
+import html
+import re
+import urllib.request
+
 import trafilatura
 from playwright.async_api import async_playwright
 
 from ai_core.core.content_validator import validate_content_integrity
 
 logger = logging.getLogger("ai_core.core.bookmark_scraper")
+
+
+def _extract_title_from_html(raw_html: str) -> str | None:
+    match = re.search(r"<title[^>]*>(.*?)</title>", raw_html, flags=re.IGNORECASE | re.DOTALL)
+    if not match:
+        return None
+    title = re.sub(r"\s+", " ", match.group(1)).strip()
+    return html.unescape(title) if title else None
+
+
+def fetch_static_content(url: str, timeout_seconds: int = 15) -> tuple[str | None, str | None]:
+    """브라우저 런치 실패 또는 정적 문서 수집용 HTTP fallback 스크래퍼."""
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw_bytes = response.read()
+            charset = response.headers.get_content_charset() or "utf-8"
+            raw_html = raw_bytes.decode(charset, errors="ignore")
+
+        title = _extract_title_from_html(raw_html)
+        content = trafilatura.extract(raw_html, include_comments=False, include_tables=True)
+        return title, content
+    except Exception as e:
+        logger.warning(f"[STATIC SCRAPER WARNING] URL 직접 수집 실패 -> {url} | Reason: {e}", exc_info=True)
+        return None, None
 
 
 def extract_bookmarks(node) -> list:
@@ -55,7 +95,10 @@ async def scrape_url_standalone(url: str, timeout_ms: int = 15000) -> tuple[str 
     title, content = None, None
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await p.chromium.launch(
+                headless=True,
+                executable_path=p.chromium.executable_path,
+            )
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
@@ -73,8 +116,12 @@ async def scrape_url_standalone(url: str, timeout_ms: int = 15000) -> tuple[str 
                 content = trafilatura.extract(raw_html, include_comments=False, include_tables=True)
     except Exception as e:
         logger.error(f"[SCRAPER CRITICAL ERROR] 단건 실시간 웹 스크래핑 장애 발생 -> URL: {url} | Reason: {str(e)}", exc_info=True)
-        
-    return title, content
+
+    if title and content:
+        return title, content
+
+    logger.info(f"[SCRAPER FALLBACK] 브라우저 추출 결과가 비어 정적 HTML 수집으로 전환합니다. -> URL: {url}")
+    return await asyncio.to_thread(fetch_static_content, url, max(5, timeout_ms // 1000))
 
 
 def validate_scraped_bookmark(title: str | None, content: str | None) -> tuple[bool, str]:

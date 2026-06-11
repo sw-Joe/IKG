@@ -7,14 +7,14 @@ import threading
 import numpy as np
 import uvicorn
 import faiss
-from fastapi import BackgroundTasks, FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from ai_core import HybridSearcher
 from ai_core.core.bookmark_scraper import scrape_url_standalone, validate_scraped_bookmark
 from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH
 from be_api.logger_config import setup_logging
-from be_api.schemas import BookmarkCreateRequest, TaskReceiptResponse
+from be_api.schemas import BookmarkCreateRequest, BookmarkIngestRequest, TaskReceiptResponse
 from be_api.tasks import EmbeddedInferenceWorker
 
 
@@ -35,25 +35,41 @@ app.add_middleware(
 searcher_engine = HybridSearcher()
 embedded_task_queue = queue.Queue()
 worker_actor = EmbeddedInferenceWorker(db_path=IKG_DB_PATH, index_path=IKG_INDEX_PATH)
+indexing_state_lock = threading.Lock()
+indexing_active_tasks = 0
 
 
 def _embedded_queue_consumer_loop():
+    global indexing_active_tasks
     logger.info("[EMBEDDED BUS] 단일 스레드 비동기 직렬화 컨텍스트 소비 루프 가동 완료.")
     while True:
+        task_item = embedded_task_queue.get()
+        task_started = False
         try:
-            task_item = embedded_task_queue.get()
             if task_item is None:
                 break
+            with indexing_state_lock:
+                indexing_active_tasks += 1
+                task_started = True
+
             action = task_item.get("action", "ADD")
             bookmark_id = task_item.get("id")
+            result = {"status": "SKIPPED"}
 
-            if action == "ADD":
-                worker_actor.execute_sequential_inference_pipeline(bookmark_id)
+            if action in {"ADD", "REINDEX"}:
+                result = worker_actor.execute_sequential_inference_pipeline(bookmark_id)
             elif action == "DELETE":
-                worker_actor.execute_sequential_removal_pipeline(bookmark_id)
-            embedded_task_queue.task_done()
+                result = worker_actor.execute_sequential_removal_pipeline(bookmark_id)
+
+            if result.get("status") == "SUCCESS":
+                searcher_engine.refresh_context()
         except Exception as e:
             logger.error(f"[EMBEDDED BUS CRITICAL ERROR] 내장 큐 파이프라인 작동 실패: {str(e)}", exc_info=True)
+        finally:
+            if task_started:
+                with indexing_state_lock:
+                    indexing_active_tasks -= 1
+            embedded_task_queue.task_done()
 
 consumer_thread = threading.Thread(target=_embedded_queue_consumer_loop, daemon=True)
 consumer_thread.start()
@@ -69,8 +85,16 @@ def get_knowledge_graph_matrix_endpoint(threshold: float = 0.85):
         rows = cursor.fetchall()
         documents = [{"id": r["id"], "title": r["title"], "url": r["url"]} for r in rows]
 
-        total_docs = len(documents)
-        nodes = [{"id": str(doc["id"]), "label": doc["title"], "url": doc["url"]} for doc in documents]
+        nodes = [
+            {
+                "id": str(doc["id"]),
+                "title": doc["title"],
+                "label": doc["title"],
+                "url": doc["url"],
+                "group": "bookmark",
+            }
+            for doc in documents
+        ]
         edges = []
 
         faiss_index = faiss.read_index(IKG_INDEX_PATH)
@@ -82,7 +106,10 @@ def get_knowledge_graph_matrix_endpoint(threshold: float = 0.85):
                 vec = faiss_index.reconstruct(doc["id"])
                 valid_docs.append(doc)
                 valid_vectors.append(vec)
-            except Exception:
+            except Exception as e:
+                logger.warning(
+                    f"[API GRAPH WARNING] FAISS 벡터 재구성 실패 -> bookmark_id={doc['id']} | {e}"
+                )
                 continue
 
         if valid_vectors:
@@ -101,7 +128,17 @@ def get_knowledge_graph_matrix_endpoint(threshold: float = 0.85):
                             "value": round(sim_score, 4)
                         })
 
-        return {"nodes": nodes, "links": edges}
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "links": edges,
+            "metadata": {
+                "node_count": len(nodes),
+                "edge_count": len(edges),
+                "vector_count": len(valid_vectors),
+                "threshold": threshold,
+            },
+        }
     except Exception as e:
         logger.error(f"[API GRAPH CRASH] 토폴로지 분석 장애: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="토폴로지 매트릭스 연산 실패")
@@ -125,8 +162,20 @@ def trigger_infrastructure_integrity_sync():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/bookmarks", response_model=TaskReceiptResponse, status_code=status.HTTP_201_CREATED)
-def create_bookmark_endpoint(payload: BookmarkCreateRequest, background_tasks: BackgroundTasks):
+@app.get("/api/system/indexing/status", status_code=status.HTTP_200_OK)
+def get_indexing_status():
+    with indexing_state_lock:
+        active_tasks = indexing_active_tasks
+    queued_tasks = embedded_task_queue.qsize()
+    return {
+        "active_tasks": active_tasks,
+        "queued_tasks": queued_tasks,
+        "idle": active_tasks == 0 and queued_tasks == 0,
+    }
+
+
+@app.post("/api/bookmarks", response_model=TaskReceiptResponse, status_code=status.HTTP_202_ACCEPTED)
+def create_bookmark_endpoint(payload: BookmarkIngestRequest):
     """북마크 인입(추가) 요청"""
     target_url = str(payload.url)
     logger.info(f"[API POST] 단건 북마크 실시간 인입 수신 -> 수집 프로세스 기동: {target_url}")
@@ -135,16 +184,21 @@ def create_bookmark_endpoint(payload: BookmarkCreateRequest, background_tasks: B
     scraped_title, scraped_content = asyncio.run(scrape_url_standalone(target_url))
     
     # 2. 실시간 크롤링 결과에 대한 고밀도 정보 유효성 가드라인 교차 검증 집행
-    is_valid_content, isolation_reason = validate_scraped_bookmark(scraped_title, scraped_content)
+    is_valid_content, validation_result = validate_scraped_bookmark(scraped_title, scraped_content)
+    if is_valid_content:
+        scraped_content = validation_result
+        isolation_reason = ""
+    else:
+        isolation_reason = validation_result
     
     # 길이가 100자 미만인 하한선 하드웨어 제약도 보완 검증 처리
-    if is_valid_content and len(scraped_content) < 100:
+    if is_valid_content and len(scraped_content or "") < 100:
         is_valid_content = False
         isolation_reason = "TEXT_LENGTH_INSUFFICIENT_UNDER_100"
 
     # 최종 저장 뼈대 확정 (실시간 크롤링 완료본이 우선하며, 누락 시 페이로드 백업 승계)
-    final_title = scraped_title or payload.title
-    final_content = scraped_content or payload.content
+    final_title = scraped_title or payload.title or target_url
+    final_content = scraped_content or payload.content or ""
 
     conn = sqlite3.connect(IKG_DB_PATH, timeout=30.0)
     cursor = conn.cursor()
@@ -159,6 +213,7 @@ def create_bookmark_endpoint(payload: BookmarkCreateRequest, background_tasks: B
                 (target_url, final_title, final_content)
             )
             assigned_id = cursor.lastrowid
+            cursor.execute("DELETE FROM bookmarks_isolated WHERE url = ?", (target_url,))
             conn.commit()
 
             # 실시간 비동기 임베딩 인덕션 버스 큐 진입 명령 트리거
@@ -213,9 +268,8 @@ def update_bookmark_endpoint(bookmark_id: int, payload: BookmarkCreateRequest):
         )
         conn.commit()
 
-        # 벡터 인덱스 갱신을 위해 삭제 후 재등록 프로세스 트리거 (비동기 처리)
-        embedded_task_queue.put({"action": "DELETE", "id": bookmark_id})
-        embedded_task_queue.put({"action": "ADD", "id": bookmark_id})
+        # ADD 파이프라인은 동일 ID 벡터를 먼저 제거한 뒤 최신 본문으로 다시 적재한다.
+        embedded_task_queue.put({"action": "REINDEX", "id": bookmark_id})
 
         return {"status": "SUCCESS", "updated_id": bookmark_id}
     finally:

@@ -1,6 +1,19 @@
 from pydantic import BaseModel, HttpUrl, Field
-from typing import Optional
 from datetime import datetime
+
+
+class BookmarkIngestRequest(BaseModel):
+    """신규 북마크 URL 인입 요청 모델. 본문은 서버 스크래퍼가 직접 수집한다."""
+    url: HttpUrl = Field(..., description="올바른 형식의 웹페이지 URL (HTTP/HTTPS 필수)")
+    title: str | None = Field(None, max_length=255, description="스크래핑 실패 시 사용할 선택 제목")
+    content: str | None = Field(None, description="스크래핑 실패 시 격리 레코드에 남길 선택 메모")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "url": "https://pytorch.org/docs/stable/nn.html"
+            }
+        }
 
 
 class BookmarkCreateRequest(BaseModel):

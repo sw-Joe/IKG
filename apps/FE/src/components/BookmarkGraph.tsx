@@ -81,7 +81,7 @@ export const BookmarkGraph: React.FC<BookmarkGraphProps> = memo(({ highlightNode
     if (!containerRef.current || loading || backendRawNodes.length === 0) return;
 
     if (!graphInstanceRef.current) {
-      const graph = ForceGraph()(containerRef.current)
+      const graph = new (ForceGraph as any)(containerRef.current)
         .nodeId('id')
         .nodeLabel('title')
         .linkColor(() => 'rgba(148, 163, 184, 0.12)')
@@ -89,7 +89,7 @@ export const BookmarkGraph: React.FC<BookmarkGraphProps> = memo(({ highlightNode
         .backgroundColor('#1e293b')
         
         // 외부 렌더러 모듈 적용 연동 완료
-        .nodeCanvasObject((node, ctx, globalScale) => {
+        .nodeCanvasObject((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
           drawNodeElement(node, ctx, globalScale);
         })
         
