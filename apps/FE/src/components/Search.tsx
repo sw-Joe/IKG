@@ -38,13 +38,13 @@ export const Search: React.FC<SearchComponentProps> = ({ onSearchComplete, onSea
     setError(null);
 
     try {
-      // 보정된 통신 인터페이스 통합 관측 호출
       const data = await bookmarkService.searchBookmarks(query.trim());
       setResults(data);
       const matchingIds = data.map((item) => String(item.id));
       onSearchComplete(matchingIds);
     } catch (err: any) {
-      setError(err.message || "하이브리드 엔진 랭킹 연산 오류");
+      console.error("[SEARCH RUNTIME ERROR]", err);
+      setError(err.message || "검색 연산 중 예외가 발생했습니다.");
     } finally {
       setLoading(false);
     }
@@ -57,86 +57,116 @@ export const Search: React.FC<SearchComponentProps> = ({ onSearchComplete, onSea
     onSearchClear();
   };
 
-  // [DELETE ACTION]: 데이터베이스 논리 소거 트리거 및 클라이언트 즉시 반영
-  const handleDeleteClick = async (id: number) => {
-    if (!window.confirm("이 지식 자산을 공간에서 영구 삭제하시겠습니까?")) return;
-    try {
-      await bookmarkService.deleteBookmark(id);
-      // UI 스레드에서 즉시 카드를 제거하여 Immediate Consistency 확보
-      setResults(prev => prev.filter(item => item.id !== id));
-    } catch (err: any) {
-      alert(`소거 실패: ${err.message}`);
-    }
-  };
-
-  // [UPDATE ACTION]: 수정 폼 활성화 워크플로우
+  // 인라인 수정 진입 제어 파이프라인
   const handleEditInit = (item: SearchResult) => {
     setEditingId(item.id);
     setEditTitle(item.title);
     setEditContent(item.content);
   };
 
-  const handleUpdateSubmit = async (id: number, originalUrl: string) => {
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditTitle("");
+    setEditContent("");
+  };
+
+  const handleEditSave = async (id: number) => {
     try {
+      const targetItem = results.find((r) => r.id === id);
+      if (!targetItem) return;
+
       await bookmarkService.updateBookmark(id, {
-        url: originalUrl,
+        url: targetItem.url,
         title: editTitle,
-        content: editContent
+        content: editContent,
       });
-      alert("정정 요청이 비동기 큐에 접수되었습니다.");
-      setResults(prev => prev.map(item => item.id === id ? { ...item, title: editTitle, content: editContent } : item));
+
+      // 로컬 메모리 상태 즉시 갱신
+      setResults((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, title: editTitle, content: editContent } : item
+        )
+      );
       setEditingId(null);
     } catch (err: any) {
-      alert(`정정 실패: ${err.message}`);
+      alert(`정정 반영 실패: ${err.message}`);
+    }
+  };
+
+  const handleDeleteClick = async (id: number) => {
+    if (!window.confirm("해당 지식 자산을 원격 매트릭스에서 영구 커팅하시겠습니까?")) return;
+    try {
+      await bookmarkService.deleteBookmark(id);
+      setResults((prev) => prev.filter((item) => item.id !== id));
+    } catch (err: any) {
+      alert(`삭제 실패: ${err.message}`);
     }
   };
 
   return (
-    <div className="search-wrapper-context">
-      <form onSubmit={handleServerSearchExecute} className="search-form-row">
+    <div className="w-full flex flex-col">
+      {/* 검색 바 입력 폼 시스템 제어부 */}
+      <form onSubmit={handleServerSearchExecute} className="search-form-wrapper">
         <input
           type="text"
           className="search-input-field"
-          placeholder="기술 자산 차원 질의어 입력..."
+          placeholder="지식 매트릭스 검색어 입력..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <button type="submit" className="search-submit-btn">검색</button>
-        {query && <button type="button" onClick={handleClear} className="search-clear-btn">X</button>}
       </form>
 
-      {loading && <div className="status-info-label">ONNX 임베딩 질의 분석 매트릭스 계산 중...</div>}
-      {error && <div className="status-error-label">⚠ {error}</div>}
+      {loading && <div className="text-xs text-blue-400 py-2 animate-pulse">엔진 하이브리드 추론 중...</div>}
+      {error && <div className="text-xs text-rose-400 py-2">{error}</div>}
 
       {!loading && results.length > 0 && (
-        <div className="results-viewport-area">
-          <h3 className="panel-headline-title">하이브리드 랭킹 결과 (Top 5)</h3>
-          <ul className="results-list-stack">
+        <div className="results-container-block">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-[11px] text-slate-500">인덱싱 검색 결과 {results.length}건</span>
+            <button onClick={handleClear} className="text-[11px] text-slate-400 hover:text-white underline">
+              초기화
+            </button>
+          </div>
+
+          <ul className="results-list-wrapper">
             {results.map((item, index) => (
               <li key={item.id} className="result-item-card">
                 {editingId === item.id ? (
-                  <div className="edit-form-container text-slate-200 flex flex-col gap-2 p-2">
-                    <input type="text" className="bg-slate-800 p-1 rounded border border-slate-700 text-xs" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
-                    <textarea className="bg-slate-800 p-1 rounded border border-slate-700 text-xs h-20" value={editContent} onChange={e => setEditContent(e.target.value)} />
-                    <div className="flex gap-2 justify-end text-xs">
-                      <button onClick={() => handleUpdateSubmit(item.id, item.url)} className="bg-emerald-600 px-2 py-1 rounded">저장</button>
-                      <button onClick={() => setEditingId(null)} className="bg-slate-700 px-2 py-1 rounded">취소</button>
+                  /* 새롭게 디자인이 바인딩된 인라인 수정 폼 */
+                  <div className="edit-form-zone">
+                    <input
+                      type="text"
+                      className="edit-input-field"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                    />
+                    <textarea
+                      className="edit-textarea-field"
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                    />
+                    <div className="edit-actions-row">
+                      <button onClick={() => handleEditSave(item.id)} className="btn-action-save">
+                        저장
+                      </button>
+                      <button onClick={handleEditCancel} className="btn-action-cancel">
+                        취소
+                      </button>
                     </div>
                   </div>
                 ) : (
                   <>
                     <div className="card-top-identity-row flex justify-between items-start">
-                      <div className="flex items-center gap-2">
-                        <div className="result-rank-badge-node">{index + 1}</div>
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <div className="result-rank-badge-node flex-shrink-0">{index + 1}</div>
                         <a href={item.url} target="_blank" rel="noopener noreferrer" className="result-title-link">
                           {item.title}
                         </a>
                       </div>
-                      {/* CRUD 조작 제어부 컴포넌트 결합 */}
-                      <div className="flex gap-1.5 text-xs text-slate-400">
-                        <button onClick={() => handleEditInit(item)} className="hover:text-blue-400">수정</button>
+                      <div className="flex gap-1.5 text-[11px] text-slate-500 flex-shrink-0 ml-2">
+                        <button onClick={() => handleEditInit(item)} className="hover:text-blue-400 transition-colors">수정</button>
                         <span>|</span>
-                        <button onClick={() => handleDeleteClick(item.id)} className="hover:text-rose-400">삭제</button>
+                        <button onClick={() => handleDeleteClick(item.id)} className="hover:text-rose-400 transition-colors">삭제</button>
                       </div>
                     </div>
                     <p className="result-content-snippet">

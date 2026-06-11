@@ -6,7 +6,6 @@
 .ikg-sidebar-container {
   width: 380px;
   height: 100%;
-  /* [변경]: 하드코딩된 #09090b 대신 중앙 통제 변수 적용 */
   background-color: var(--bg-panel); 
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
@@ -35,114 +34,75 @@
   margin: 0;
 }
 
-/* 폼 인풋 및 스택 결과 리스트가 사이드바 내부 컨텍스트에서만 가상 스크롤 격리 작동 */
+/* =========================================================================
+   2. 사이드바 스크롤 영역 활성화 및 스크롤바 제어
+   ========================================================================= */
 .sidebar-content-scroll-zone {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
-  box-sizing: border-box;
+  padding: 0 20px 20px 20px;
 }
 
+/* 웹킷 기반 브라우저 전용 스크롤바 다크 커스텀 */
 .sidebar-content-scroll-zone::-webkit-scrollbar {
-  width: 5px;
+  width: 4px;
 }
+
+.sidebar-content-scroll-zone::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .sidebar-content-scroll-zone::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.sidebar-content-scroll-zone::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* =========================================================================
-   2. 단일 입력 폼 구조 제어
+   3. 검색 입력 시스템 (Search Input UX)
    ========================================================================= */
-.hybrid-search-core-wrapper {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.search-form-layout {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.search-input-relative-container {
-  position: relative;
-  flex: 1;
+.search-form-wrapper {
+  margin-top: 16px;
+  margin-bottom: 16px;
 }
 
 .search-input-field {
   width: 100%;
   height: 38px;
-  padding: 0 32px 0 12px;
-  background: rgba(255, 255, 255, 0.02);
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
-  font-size: 12px;
-  color: #ffffff;
+  color: var(--text-main);
+  font-size: 13px;
   outline: none;
-  transition: border-color 0.15s ease;
-  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .search-input-field:focus {
-  border-color: #2563eb;
-  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  background: rgba(255, 255, 255, 0.05);
 }
 
-.inner-clear-button {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  color: #52525b;
-  cursor: pointer;
-  font-size: 11px;
-}
-
-.inner-clear-button:hover {
-  color: #ffffff;
-}
-
-.search-trigger-button {
-  height: 38px;
-  padding: 0 14px;
-  background: #2563eb;
-  color: #ffffff;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.search-trigger-button:hover {
-  background: #1d4ed8;
+.search-input-field::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
 }
 
 /* =========================================================================
-   3. 결과 리스트 카드 아키텍처
+   4. 검색 결과 리스트 및 카드 시스템
    ========================================================================= */
-.search-results-viewport-panel {
+.results-container-block {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.panel-headline-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: #3b82f6;
-  margin: 0;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.results-list-stack {
+.results-list-wrapper {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -152,20 +112,17 @@
 }
 
 .result-item-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px;
+  padding: 14px;
   border-radius: 8px;
-  /* [변경]: 슬레이트 배경 위에서 카드가 살짝 도드라지도록 명도 스케일 보정 (Slate 800/700 사이 대역) */
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  /* 카드 인지력 향상을 위해 명도 스케일 보정 */
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
   transition: all 0.15s ease;
 }
 
 .result-item-card:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .card-top-identity-row {
@@ -198,44 +155,116 @@
 }
 
 .result-title-link:hover {
-  color: #3b82f6;
+  color: var(--accent-blue);
+  text-decoration: underline;
 }
 
 .result-content-snippet {
-  font-size: 11.5px;
-  color: #a1a1aa;
-  line-height: 1.4;
-  margin: 0;
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
 .card-bottom-metrics-grid {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 2px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  align-items: center;
 }
 
 .metric-badge-final {
   font-size: 10.5px;
-  font-weight: 700;
-  color: #60a5fa;
+  color: var(--accent-blue);
+  font-weight: 500;
+  background: rgba(59, 130, 246, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
-.sub-metrics-row {
+/* =========================================================================
+   5. 인라인 수정 폼 뷰 (Inline CRUD Edit Control)
+   ========================================================================= */
+.edit-form-zone {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  color: #52525b;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  background: rgba(15, 23, 42, 0.4);
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.search-error-layer, .zero-hits-placeholder-layer {
-  font-size: 11px;
-  color: #71717a;
-  padding: 14px;
-  border-radius: 6px;
-  border: 1px dashed rgba(255, 255, 255, 0.05);
-  text-align: center;
+.edit-input-field {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: #0f172a; /* var(--bg-panel) 동기화 */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--text-main);
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.edit-input-field:focus {
+  border-color: var(--accent-blue);
+}
+
+.edit-textarea-field {
+  width: 100%;
+  min-height: 64px;
+  padding: 6px 10px;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--text-main);
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical; /* 에지케이스: 가로 레이아웃 파괴 원천 차단 */
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.edit-textarea-field:focus {
+  border-color: var(--accent-blue);
+}
+
+.edit-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.btn-action-save {
+  padding: 4px 10px;
+  background: var(--accent-blue);
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.btn-action-save:hover {
+  background: #2563eb;
+}
+
+.btn-action-cancel {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-action-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
 }
