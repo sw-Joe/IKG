@@ -14,6 +14,7 @@ INDEX_SETTLE_TIMEOUT_SECONDS="${INDEX_SETTLE_TIMEOUT_SECONDS:-300}"
 RESPONSE_DIR="${RESPONSE_DIR:-/tmp/ikg_custom_url_responses}"
 MAX_PARALLEL_REQUESTS="${MAX_PARALLEL_REQUESTS:-5}"
 
+# AI 및 개발지식과 관련된 북마크 다수, 영화, 학교사이트 등 노이즈 
 URLS=(
   'https://docs.python.org/3/library/dataclasses.html'
   'https://namu.wiki/w/Redox'
