@@ -27,7 +27,7 @@ app = FastAPI(title="IKG Hybrid Search Gateway", version="0.6.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,    # 쿠기/인증 정보 차단
     allow_methods=["*"],
     allow_headers=["*"],
 )
