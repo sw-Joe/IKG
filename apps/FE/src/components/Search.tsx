@@ -163,17 +163,17 @@ export const Search: React.FC<SearchComponentProps> = ({ onSearchComplete, onSea
                           {item.title}
                         </a>
                       </div>
-                      <div className="flex gap-1.5 text-[11px] text-slate-500 flex-shrink-0 ml-2">
-                        <button onClick={() => handleEditInit(item)} className="hover:text-blue-400 transition-colors">수정</button>
-                        <span>|</span>
-                        <button onClick={() => handleDeleteClick(item.id)} className="hover:text-rose-400 transition-colors">삭제</button>
-                      </div>
                     </div>
                     <p className="result-content-snippet">
                       {item.content.length > 105 ? `${item.content.substring(0, 105)}...` : item.content}
                     </p>
                     <div className="card-bottom-metrics-grid">
                       <span className="metric-badge-final">융합 스코어: {item.score.toFixed(4)}</span>
+                    </div>
+                    <div className="flex gap-1.5 text-[11px] text-slate-500 flex-shrink-0 ml-2">
+                      <button onClick={() => handleEditInit(item)} className="hover:text-blue-400 transition-colors">수정</button>
+                      <span>|</span>
+                      <button onClick={() => handleDeleteClick(item.id)} className="hover:text-rose-400 transition-colors">삭제</button>
                     </div>
                   </>
                 )}
