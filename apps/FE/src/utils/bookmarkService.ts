@@ -30,6 +30,8 @@ export interface GraphTopologyResponse {
 }
 
 const BE_BASE_URL = "http://127.0.0.1:8000";
+// const BE_BASE_URL = "http://192.168.0.4:8000";
+
 
 export const bookmarkService = {
   /**

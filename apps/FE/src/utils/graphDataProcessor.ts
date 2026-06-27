@@ -1,5 +1,3 @@
-// apps/FE/src/utils/graphDataProcessor.ts
-
 export interface ProcessedTopology {
   nodes: any[];
   links: any[]; // [교정]: edges에서 links로 명세 변경
@@ -115,6 +113,6 @@ export function synthesizeTopology(
     }
   });
 
-  // [교정]: D3 사상을 위해 반드시 'links' 규격으로 변환하여 반환해야 함
+  // D3 사상을 위해 반드시 'links' 규격으로 변환하여 반환해야 함
   return { nodes: finalNodes, links: finalEdges };
 }
