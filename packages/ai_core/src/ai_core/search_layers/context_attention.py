@@ -1,7 +1,6 @@
 import logging
+
 import numpy as np
-
-
 
 logger = logging.getLogger("ai_core.search_layers.context_attention")
 

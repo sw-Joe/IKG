@@ -1,7 +1,8 @@
-import logging
+import logging  
 import asyncio
 import html
 import re
+import os
 import urllib.request
 
 import trafilatura
@@ -9,7 +10,30 @@ from playwright.async_api import async_playwright
 
 from ai_core.core.content_validator import validate_content_integrity
 
+
+
 logger = logging.getLogger("ai_core.core.bookmark_scraper")
+
+# ---------------------------------------------------------------------
+# [CONCURRENCY GUARD]: 하드웨어 맞춤형 보수적 사양 가드 로직
+# ---------------------------------------------------------------------
+def _calculate_conservative_concurrency() -> int:
+    try:
+        cpu_cores = os.cpu_count() or 2
+        # 저사양 랩탑 환경을 위한 임계 가드: 가용 코어에서 2개를 제하되 최소 1개 ~ 최대 2개로 제약
+        concurrency_limit = max(1, cpu_cores - 2)
+        return min(concurrency_limit, 2)
+    except Exception:
+        return 1
+
+CONCURRENCY_LIMIT = _calculate_conservative_concurrency()
+
+# 전역 비동기 자원 통제 싱글톤 변수
+_scraper_semaphore = None
+_playwright_instance = None
+_global_browser = None
+
+logger.info(f"[RESOURCE GUARD] 시스템 맞춤 가드 작동 -> 크롬 동시 렌더링 한계: {CONCURRENCY_LIMIT}개")
 
 
 def _extract_title_from_html(raw_html: str) -> str | None:
@@ -87,18 +111,33 @@ async def fetch_dynamic_content_with_context(context, url: str) -> tuple[str | N
             await page.close()
 
 
+async def get_clean_browser_singleton():
+    """OS 자원 고갈을 막기 위한 단일 크롬 브라우저 커널 인스턴스 생명주기 관리"""
+    global _playwright_instance, _global_browser
+    if _global_browser is None:
+        _playwright_instance = await async_playwright().start()
+        _global_browser = await _playwright_instance.chromium.launch(
+            headless=True,
+            args=["--disable-dev-shm-usage", "--no-sandbox", "--disable-gpu"]
+        )
+    return _global_browser
+
+
 async def scrape_url_standalone(url: str, timeout_ms: int = 15000) -> tuple[str | None, str | None]:
     """
-    [NEW INFRA]: 단건 실시간 인입 자산 전용 크로니클 크롬 정밀 스크래핑 엔진
-    - 브라우저 컨텍스트를 독립 발급하여 동적 CSR 렌더링 본문을 원자적으로 탈취합니다.
+    [SAFE ASYNC ENGINE]: 세마포어 가드선 내부에서 전역 싱글톤 브라우저 탭 컨텍스트를
+    안전하게 공유 발급받아 동적 CSR 페이지 본문을 리소스 크래시 없이 원자적으로 포획합니다.
     """
+    global _scraper_semaphore
+    if _scraper_semaphore is None:
+        _scraper_semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+
     title, content = None, None
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                executable_path=p.chromium.executable_path,
-            )
+    
+    # 💡 세마포어 풀에 임시 대기 진입하여 동시성 레이턴시 스로틀링 집행
+    async with _scraper_semaphore:
+        try:
+            browser = await get_clean_browser_singleton()
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
@@ -110,12 +149,14 @@ async def scrape_url_standalone(url: str, timeout_ms: int = 15000) -> tuple[str 
                 
             title = (await page.title()).strip()
             raw_html = await page.content()
-            await browser.close()
             
             if raw_html:
                 content = trafilatura.extract(raw_html, include_comments=False, include_tables=True)
-    except Exception as e:
-        logger.error(f"[SCRAPER CRITICAL ERROR] 단건 실시간 웹 스크래핑 장애 발생 -> URL: {url} | Reason: {str(e)}", exc_info=True)
+                
+            await page.close()
+            await context.close()
+        except Exception as e:
+            logger.error(f"[SCRAPER CRITICAL ERROR] 단건 실시간 웹 스크래핑 장애 발생 -> URL: {url} | Reason: {str(e)}", exc_info=True)
 
     if title and content:
         return title, content
@@ -129,6 +170,5 @@ def validate_scraped_bookmark(title: str | None, content: str | None) -> tuple[b
     if not title or not content or not content.strip():
         return False, "ERR_EMPTY_OR_FETCH_FAILED"
         
-    # 상용 수준 본문 정규식 매칭 가드 엔진 연동
     is_valid, reason_or_cleaned = validate_content_integrity(title, content)
     return is_valid, reason_or_cleaned

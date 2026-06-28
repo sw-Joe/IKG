@@ -1,8 +1,6 @@
+import logging
 import os
 import sqlite3
-import logging
-
-
 
 logger = logging.getLogger("ai_core.core.db_initializer")
 

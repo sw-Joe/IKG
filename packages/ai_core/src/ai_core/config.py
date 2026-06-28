@@ -1,8 +1,7 @@
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
-
-
 
 # 1. 최상단 루트 디렉토리 기점의 .env 파일을 찾아 시스템 환경변수 메모리에 적재
 # 로컬 가동 시 .env가 주입되어 os.getenv가 작동할 수 있게 만듭니다.
@@ -24,7 +23,7 @@ os.makedirs(os.path.dirname(IKG_DB_PATH), exist_ok=True)
 os.makedirs(os.path.dirname(IKG_INDEX_PATH), exist_ok=True)
 
 # 5. 콘솔 정합성 확인 피드백
-print(f"[IKG CONFIG BOUND]")
+print("[IKG CONFIG BOUND]")
 print(f" - Project Root Path: {PROJECT_ROOT}")
 print(f" - Active DB Path:    {IKG_DB_PATH}")
 print(f" - Active Index Path: {IKG_INDEX_PATH}")

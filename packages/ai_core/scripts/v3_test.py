@@ -1,5 +1,5 @@
-from hybrid_search_lagacy.attention import AttentionHybridSearcher
 from hybrid_search import HybridSearcher
+from hybrid_search_lagacy.attention import AttentionHybridSearcher
 from hybrid_search_lagacy.hybrid_search_v2 import HybridSearcherV2
 from hybrid_search_lagacy.native_sparse_embedding_search import SearcherNativeSparse
 from hybrid_search_lagacy.rank_scaled_score_fusion import HybridSearcherV3RankScaled

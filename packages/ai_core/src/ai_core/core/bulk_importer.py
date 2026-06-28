@@ -14,7 +14,9 @@ from ai_core.core.embedder import BGEEmbedder
 from ai_core.core.indexer import VectorIndexer
 from ai_core.core.db_initializer import initialize_database_schema
 
-# 💡 [REFACTORED]: bookmark_scraper 모듈로 이관된 수집 및 검증 기능 레이어 집중 수입
+
+
+# bookmark_scraper 모듈로 이관된 수집 및 검증 기능 레이어 집중 수입
 from ai_core.core.bookmark_scraper import (
     extract_bookmarks,
     fetch_dynamic_content_with_context,
@@ -37,7 +39,7 @@ async def run_bulk_import(json_file_path: str):
         logger.error(f"[BULK IMPORT ERROR] 대상 백업 JSON 파일이 지정된 경로에 부재합니다: {json_file_path}")
         return
 
-    # 데이터베이스 초기 뼈대 무결성 확인
+    # 데이터베이스 초기 뼈대 무결성 확인 (전역 상수 명시 주입)
     initialize_database_schema(IKG_DB_PATH)
 
     with open(json_file_path, "r", encoding="utf-8") as f:
@@ -52,7 +54,7 @@ async def run_bulk_import(json_file_path: str):
         logger.warning("[BULK IMPORT CANCELLED] 파싱된 유효 자산 수량이 0건입니다.")
         return
 
-    # 3. STAGE 1: Playwright 브라우저 배치 격리 세션 커널 생성 (동적 스크래핑 극대화 가속)
+    # 3. STAGE 1: Playwright 브라우저 배치 격리 세션 커널 생성
     logger.info("[BULK SCRAPING] 1단계: 동적 커널 기반 데이터 수집 및 정보 가치 필터링 세션 개시...")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -68,14 +70,12 @@ async def run_bulk_import(json_file_path: str):
                 url = b["uri"]
                 logger.info(f"[{idx}/{total_bookmarks}] 대용량 배치 크롤링 타깃 스캔 -> {url}")
                 
-                # 수입된 동적 컨텍스트 크롤러 및 유효성 가드라인 작동
                 title, content = await fetch_dynamic_content_with_context(context, url)
                 is_valid, reason_or_content = validate_scraped_bookmark(title, content)
                 
                 final_title = title or b["title"]
                 
                 if is_valid:
-                    # 정보 무결성을 통과한 정상 자산군 타깃 분기
                     if len(reason_or_content) < 100:
                         cursor.execute(
                             """
@@ -93,7 +93,6 @@ async def run_bulk_import(json_file_path: str):
                             (url, final_title, reason_or_content)
                         )
                 else:
-                    # 웹 방화벽 차단, 404, 혹은 본문 훼손 자산 -> 격리 샌드박스 테이블 이관 (FAISS 인큐잉 원천 격리 차단)
                     cursor.execute(
                         """
                         INSERT INTO bookmarks_isolated (url, title, content, created_at, isolation_reason)
@@ -102,7 +101,6 @@ async def run_bulk_import(json_file_path: str):
                         (url, final_title, content or "", reason_or_content)
                     )
                 
-                # 50건 단위 부분 물리 플러시 트랜잭션 최적화로 동시성 DB 잠금 경합 최소화
                 if idx % 50 == 0:
                     conn.commit()
                     
@@ -149,15 +147,12 @@ async def run_bulk_import(json_file_path: str):
         batch_texts = [f"{row['title']} {row['content']}" for row in chunk_rows]
         batch_ids = [row['id'] for row in chunk_rows]
 
-        # [True Batch Inference]: 단건 순회를 타파하고 100개 행렬을 ONNX C++ 커널에 단 1회 밀어 넣어 하드웨어 최대 가속
         chunk_vectors_np = embedder.encode_batch(batch_texts)
         chunk_ids_np = np.array(batch_ids, dtype=np.int64)
 
-        # FAISS 인메모리 차원 일련 가상 번호 공간 맵 적재
         faiss_index.add_with_ids(chunk_vectors_np, chunk_ids_np)
         total_successfully_indexed += current_chunk_count
 
-        # SQLite 동기화 체크포인트 마킹 일괄 집행
         conn = sqlite3.connect(IKG_DB_PATH)
         cursor = conn.cursor()
         try:
@@ -172,13 +167,11 @@ async def run_bulk_import(json_file_path: str):
         finally:
             conn.close()
 
-        # [메모리 가드]: 100단위 텐서 수학 연산 버퍼 찌꺼기 즉시 물리 소거 및 RAM 반환
         del chunk_vectors_np, chunk_ids_np, batch_texts, batch_ids
         gc.collect()
 
         logger.info(f" -> [INDEX BATCH #{inference_batch_num} FLUSHED] 다차원 벡터 인메모리 병합 및 고밀도 텐서 가비지 소거 완료.")
 
-    # 양대 스테이지의 모든 분할 배치가 완벽하게 안착한 최종 시점에 단 1회의 원자적 파일 영구 커밋(write) 집행
     if total_successfully_indexed > 0:
         faiss.write_index(faiss_index, IKG_INDEX_PATH)
         logger.info(f"[BULK IMPORT SUCCESS] 총 {total_successfully_indexed}건의 지식 가치 자산이 FAISS 공간 및 SQLite 동기화 정착 완료되었습니다.")

@@ -1,20 +1,17 @@
+import logging
 import os
 import sqlite3
-import logging
 
 import faiss
 import numpy as np
 
 from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH
 
-
-
 logger = logging.getLogger("ai_core.core.indexer")
 
 
 class VectorIndexer:
     def __init__(self, db_path=None, index_path=None, dimension=1024):
-        from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH
         self.db_path = db_path or IKG_DB_PATH
         self.index_path = index_path or IKG_INDEX_PATH
         self.dimension = dimension

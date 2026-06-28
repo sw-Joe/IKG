@@ -1,8 +1,6 @@
-import sys
-import os
 import logging
-
-
+import os
+import sys
 
 # 로깅 인프라 수동 빌드 (테스트 콘솔 출력용)
 logging.basicConfig(
@@ -43,7 +41,7 @@ def run_search_sanity_check():
     logger.info(f"[물리 지표] DB 레코드 수: {doc_count}개 | FAISS 벡터 수: {index_total}개")
     
     if doc_count != index_total:
-        logger.warning(f"⚠️ [주의] DB와 INDEX 개수가 다릅니다. 가드레일 코드의 우회 배출 로직이 가동되어야 합니다.")
+        logger.warning("⚠️ [주의] DB와 INDEX 개수가 다릅니다. 가드레일 코드의 우회 배출 로직이 가동되어야 합니다.")
 
     # 3. 모의 질의어 인퍼런스 수행 및 레이어별 상태 추적
     test_query = "파이썬 기초 문법"

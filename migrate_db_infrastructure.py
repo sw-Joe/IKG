@@ -1,6 +1,6 @@
+import logging
 import os
 import sqlite3
-import logging
 
 # 1. 스크립트 전용 로깅 컨텍스트 초기화
 logging.basicConfig(
@@ -100,9 +100,9 @@ def run_one_time_migration():
 
     except Exception as e:
         conn.rollback()
-        logger.error(f"==========================================================================")
+        logger.error("==========================================================================")
         logger.error(f"[MIGRATION CRASH] 마이그레이션 연산 중 치명적 설계 결함 감지 후 롤백: {str(e)}")
-        logger.error(f"==========================================================================")
+        logger.error("==========================================================================")
     finally:
         conn.close()
 

@@ -1,8 +1,6 @@
 import logging
 import re
 
-
-
 logger = logging.getLogger("ai_core.content_validator")
 
 

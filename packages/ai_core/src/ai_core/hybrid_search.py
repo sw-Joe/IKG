@@ -2,18 +2,15 @@ import logging
 import sqlite3
 import threading
 
-import numpy as np
 import faiss
 from rank_bm25 import BM25Okapi
 
-from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH, IKG_MODEL_PATH, IKG_MODEL_FILE
-from ai_core.core.embedder import BGEEmbedder
+from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH, IKG_MODEL_FILE, IKG_MODEL_PATH
 from ai_core.core.db_initializer import initialize_database_schema
+from ai_core.core.embedder import BGEEmbedder
 from ai_core.search_layers.candidate_pool import CandidatePoolExtractor
 from ai_core.search_layers.context_attention import ContextAttentionRouter
 from ai_core.search_layers.rank_filter import AdvancedRankFilter
-
-
 
 logger = logging.getLogger("ai_core.hybrid_search")
 

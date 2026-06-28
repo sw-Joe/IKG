@@ -1,10 +1,10 @@
-import os
-import sqlite3
 import logging
+import sqlite3
+
 import faiss
 import numpy as np
 
-from ai_core.config import IKG_DB_PATH, IKG_INDEX_PATH, IKG_MODEL_PATH, IKG_MODEL_FILE
+from ai_core.config import IKG_MODEL_FILE, IKG_MODEL_PATH
 from ai_core.core.embedder import BGEEmbedder
 from ai_core.core.indexer import VectorIndexer
 
