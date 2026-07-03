@@ -172,3 +172,23 @@ def validate_scraped_bookmark(title: str | None, content: str | None) -> tuple[b
         
     is_valid, reason_or_cleaned = validate_content_integrity(title, content)
     return is_valid, reason_or_cleaned
+
+
+async def warmup_browser_infrastructure():
+    """
+    [INFRASTRUCTURE WARM-UP]: 백엔드 게이트웨이 스타트업 시점에 
+    Playwright 커널 및 싱글톤 브라우저 프로세스를 미리 백그라운드에 상주시켜 
+    런타임 동시 폭격 시의 드라이버 소켓 단절(자살 시그널)을 원천 차단합니다.
+    """
+    global _playwright_instance, _global_browser
+    if _global_browser is None:
+        logger.info("[INFRASTRUCTURE] Playwright 전역 싱글톤 브라우저 커널 초기화 웜업 개시...")
+        try:
+            _playwright_instance = await async_playwright().start()
+            _global_browser = await _playwright_instance.chromium.launch(
+                headless=True,
+                args=["--disable-dev-shm-usage", "--no-sandbox", "--disable-gpu"]
+            )
+            logger.info("[INFRASTRUCTURE] Playwright 싱글톤 브라우저 인프라가 메모리에 완벽히 안착되었습니다.")
+        except Exception as e:
+            logger.critical(f"[INFRASTRUCTURE CRITICAL] 브라우저 선제 웜업 실패: {e}", exc_info=True)
