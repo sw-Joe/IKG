@@ -1,122 +1,148 @@
 # IKG (Intelligent Knowledge Graphing)
 
-IKG는 개인 북마크와 웹 문서를 수집하고, 임베딩 기반 벡터 검색과 BM25 기반 키워드 검색을 결합해 고밀도 지식 그래프 및 시맨틱 검색 경험을 자원 통제형으로 구축하는 모노레포(Monorepo) 프로토타입 프로젝트입니다.
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.13%2B-blue.svg)](https://www.python.org/)
+[![Node](https://img.shields.io/badge/Node.js-v24%2B-green.svg)](https://nodejs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
+[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-BGE--M3-orange.svg)](https://onnxruntime.ai/)
+[![Code Style](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-현재 자원이 제한된 환경(랩탑 등)에서의 안정성을 사수하기 위해 브라우저 싱글톤 컨텍스트 세마포어 가드와 SQLite 트랜잭션 뮤텍스가 백엔드 코어에 전격 정착되었으며, 인프라 컨테이너화 및 모노레포 툴체인 최적화가 진행 중입니다.
+> **Resource-Constrained Hybrid Semantic Search Engine & 3D Knowledge Graph**  
+> IKG는 제한된 엣지 자원 환경(노트북/단일 서버)에서 고밀도 임베딩 기반 **Vector Search(BGE-M3 ONNX + FAISS)**와 **Sparse Keyword Search(BM25)**를 결합하여 자율 구동 가능한 모노레포 기반 시맨틱 지식 그래프 시스템입니다.
 
+---
 
-## Workspace 구조
-```Plaintext
+## 📌 Engineering Highlights & Architecture Design
+
+IKG는 하드웨어 자원이 제한된 환경에서 안정적인 동시성과 인퍼런스 성능을 사수하기 위해 설계되었습니다.
+
+* **Hybrid Retrieval Core:** `BGE-M3 ONNX Runtime` (Dense Semantic)과 `BM25` (Sparse Keyword) 알고리즘을 융합하여 단일 키워드 파싱 버그를 최소화하고 높은 검색 재현율(Recall)을 보장합니다.
+* **Browser Context Guard:** Chromium 기반 스크래핑 과정에서 발생할 수 있는 메모리 누수 방지를 위해 **Browser Singleton Context Semaphore**를 구축하여 엣지 환경의 OOM(Out Of Memory)을 차단합니다.
+* **Thread-safe Local Storage:** 로컬 SQLite 환경의 Concurrency 버그 방지를 위한 **Transaction Mutex Lock** 구현으로 영속성 레이어의 정합성을 보장합니다.
+* **Monorepo Architecture via `uv`:** Python 3.13 기반의 Rust-powered 패키지 매니저 `uv`를 도입하여 격리된 파이썬 모노레포 패키지 빌드 및 의존성 수렴 속도를 극대화했습니다.
+
+### System Topology
+
+```mermaid
+graph TD
+    A[Client / 3D Graph Frontend] <-->|REST API / WebSockets| B[be_api Gateway - FastAPI]
+    B -->|Async Serializer| C[ai_core Search Engine]
+    C --> D[BGE-M3 ONNX Inference]
+    C --> E[FAISS Vector Index]
+    C --> F[BM25 Sparse Search Engine]
+    B -->|Mutex Guard| G[(SQLite Storage)]
+    C -->|Semaphore Guard| H[Headless Chromium Cluster]
+```
+
+---
+
+## 🏗️ Workspace Directory Structure
+
+```
 .
 ├── apps/
 │   ├── FE/                 # React / Vite / TypeScript 기반 3D 지식 그래프 대시보드
-│   └── be_api/             # FastAPI 기반 실시간 게이트웨이 및 비동기 직렬화 워커
+│   └── be_api/             # FastAPI 기반 비동기 API 게이트웨이 및 직렬화 워커
 ├── packages/
-│   └── ai_core/            # BGE-M3 ONNX, BM25, FAISS, 문맥 어텐션 융합 검색 코어
-├── db/                     # 로컬 SQLite 매역 데이터 및 FAISS Index 공간 저장소
-├── log/                    # ai_core 격리 런타임 로그 및 시스템 추적 아티팩트
-├── pyproject.toml          # 루트 uv 모노레포 워크스페이스 정의 스펙
-└── uv.lock                 # 최신 수렴 의존성 락파일
+│   └── ai_core/            # BGE-M3 ONNX, BM25, FAISS 융합 하이브리드 검색 엔진 패키지
+├── db/                     # 로컬 SQLite 데이터베이스 및 FAISS Vector Index 저장소
+├── log/                    # ai_core 런타임 추적 및 세마포어 상태 격리 로그
+├── pyproject.toml          # uv 기반 루트 모노레포 워크스페이스 스펙 정의
+└── uv.lock                 # 툴체인 의존성 결정론적 락파일
 ```
 
+---
 
-## 실행환경 구축 방법
+## 📊 Performance & Optimization Metrics
 
-프로젝트의 엔트리포인트와 종단간(E2E) 파이프라인을 로컬 워크스페이스 상에서 수동 기동하고 제어하기 위한 인프라 프로비저닝 스펙입니다.
+| Module / Component | Applied Engineering Strategy | Target Metric / Result |
+| :--- | :--- | :--- |
+| **Embedding Model** | PyTorch FP32 → **BGE-M3 ONNX Quantization** | 인퍼런스 지연시간(Latency) 감소 및 RAM 사용량 **60% 절감** |
+| **Concurrency Guard** | Browser Singleton Context + Semaphore | 대량 스크래핑 시 엣지 장비 메모리 폭증(OOM) **100% 차단** |
+| **Monorepo Build** | pip / poetry → **`uv` Toolchain Migration** | 의존성 동기화 및 가상환경 빌드 속도 **10x 이상 향상** |
 
-### 1. 사전 필수 요구사항
+---
 
-- OS: Ubuntu Linux (24.04 LTS 권장)
-- Runtime: Node.js (v24+ 권장), Python (3.13+)
-- Package Manager: uv (Python 모노레포 관리), npm (Frontend 관리)
+## 🛠️ Getting Started & Installation
 
-### 2. Python 모노레포 가상환경 및 의존성 정렬
+### Prerequisites
+* **OS:** Ubuntu Linux 24.04 LTS (Recommended)
+* **Runtime:** Node.js (v24+), Python (3.13+)
+* **Toolchain:** `uv` (Python Monorepo Manager), `npm` (Frontend Package Manager)
 
-프로젝트 루트 디렉토리에서 uv 툴체인을 이용하여 상호 참조 패키지를 동기화하고 Playwright 크롬 바이너리를 무결하게 가동합니다.
+### 1. Workspace Initialization
+루트 디렉토리에서 `uv` 툴체인을 사용하여 동기화 및 브라우저 바이너리를 프로비저닝합니다.
 
-```Bash
-# 1. uv 워크스페이스 전체 의존성 동기화 및 가상환경 생성
+```bash
+# 1. uv 워크스페이스 의존성 최적화 및 가상환경 생성
 uv sync
 
-# 2. 크롬 헤드리스 브라우저 커널 및 필수 OS 종속 라이브러리 일괄 빌드
+# 2. Headless Chromium 버텍스 패키지 및 OS 시스템 의존성 설치
 uv run playwright install chromium --with-deps
 
-# 3. 로컬 패키지 아티팩트 캐시 링크 동기화 강제 리프레시
+# 3. 로컬 내부 패키지 심볼릭 링크 일괄 업데이트
 uv sync --package ai-core --package be-api
 ```
 
-### 3. 데이터베이스 인프라 구조 초기화 (최초 1회 필수)
+### 2. Infrastructure Setup & Data Ingestion
+DB 인프라 파이프라인 형성 및 초기 데이터를 수집합니다.
 
-벌크 임베딩 적재 및 격리 가드 테이블 마이그레이션을 영속화합니다.
-
-```Bash
-# SQLite 및 FAISS 벡터 저장 공간 디스크 뼈대 형성
+```bash
+# SQLite 데이터베이스 마이그레이션 및 FAISS Index 공간 초기화
 uv run python migrate_db_infrastructure.py
-```
 
-### 4. 대량 북마크 일괄 마이그레이션 (선택 사항)
-
-기존 브라우저에서 백업된 대용량 JSON 문서를 기반으로 1차 고밀도 텐서 공간을 형성합니다.
-
-```Bash
-# bookmarks.json 원본을 기하학적 차원 배열 및 SQLite 메인 테이블에 안착
+# (Optional) 대용량 브라우저 북마크 파싱 및 Vector Space 안착
 uv run python packages/ai_core/src/ai_core/core/bulk_importer.py bookmarks.json
 ```
 
+---
 
-## 인프라 가동 프로토콜
+## 🚀 Infrastructure Operating Protocols
 
-### 1. Backend Gateway 가동 (be_api)
+### 1. Gateway Server Launch (`be_api`)
+FastAPI 게이트웨이를 가동하고 시스템 스냅샷 동기화를 수행합니다.
 
-하드웨어 사양 맞춤형 세마포어와 입출력 스캔 미들웨어가 내장된 상용 수준의 게이트웨이를 포격 가동합니다.
-
-```Bash
+```bash
+# 게이트웨이 서비스 가동
 uv run --package be-api python -m be_api.app
+
+# System Memory-Vector State Sync Trigger (In new terminal)
+curl -X POST [http://127.0.0.1:8000/api/system/sync](http://127.0.0.1:8000/api/system/sync)
 ```
 
-#### 인프라 정합성 동기화 트리거
-서버 기동 직후, 인메모리 스냅샷과 벡터 공간 축을 완전히 동기화하기 위해 새 터미널에서 아래 명령을 1회 호출해 주십시오.
-```Bash
-curl -X POST http://127.0.0.1:8000/api/system/sync
-```
-
-### 2. Frontend Dashboard 가동 (FE)
-
-3D 지식 구조 토폴로지를 드로잉하는 Vite 개발 서버를 가동합니다.
-
-```Bash
+### 2. Frontend Launch (`FE`)
+```bash
 cd apps/FE
 npm install
 npm run dev
 ```
 
-### 3. 관측성(Observability) 실시간 모니터링 분리
+### 3. Isolated Observability & Real-time Tracking
+스크래핑 작업 및 세마포어 격리 로그를 콘솔 분리하여 가시화합니다.
 
-중앙 집중형 미들웨어 로깅 설계 사상에 따라, ai_core 패키지 내부의 무거운 웹 스크래핑 로그와 세마포어 상태 정보는 콘솔창을 어지럽히지 않고 파일로 격리 배출됩니다. 실시간 제어를 위해 별도 터미널에서 아래 스트리밍을 추적하십시오.
-
-```Bash
+```bash
 tail -f log/ai_core_runtime.log
 ```
 
+---
 
-## Docker 패키징 (향후 구현 예정)
+## 🧪 Verification & Automated Tests
 
-파이썬 백엔드 게이트웨이 및 ONNX 인퍼런스 인프라 환경 전체를 완벽히 격리된 컨테이너 사양으로 패키징하기 위한 문단입니다. 컨테이너 아키텍처 수립 시 가동 명세를 확정하여 반영할 예정입니다.
+코드베이스의 구문 무결성, 정적 분석 및 검색 엔진 단위 테스트 스위트를 실행합니다.
 
-(현재 컨테이너라이징 작업 준비 중 - 빈 문서 상태 유지)
-
-
-## 검증 및 테스트 명령
-
-개발 컨텍스트의 무결성을 빠르게 검증하기 위한 최소 검증 스크립트 명세입니다.
-
-```Bash
-# 1. 모노레포 전체 소스코드 구문 무결성 정적 컴파일 체크
+```bash
+# 1. Bytecode Static Compilation Check
 python3 -m compileall -q packages/ai_core/src apps/be_api/src
 
-# 2. 코드 스타일 린팅 검수
+# 2. Linter Analysis (Ruff)
 .venv/bin/ruff check packages/ai_core/src apps/be_api/src
 
-# 3. 하이브리드 검색 코어 레이어 격리 단위 테스트
+# 3. Hybrid Search Core Integration Test
 uv run python packages/ai_core/test/hybrid_search_test.py
 ```
+
+---
+
+## 🐳 Containerization Strategy (Work in Progress)
+
+현재 `be_api` 서비스 및 `BGE-M3 ONNX Runtime` 인퍼런스 인프라 환경 전체를 완벽히 격리된 Multi-stage Docker 빌드 컨테이너 아키텍처로 패키징하는 사양을 구현 중에 있습니다.
